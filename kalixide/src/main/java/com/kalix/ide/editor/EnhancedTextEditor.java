@@ -1196,21 +1196,11 @@ public class EnhancedTextEditor extends JPanel {
      * Represents a range-anchored text replacement: on line {@code lineNumber},
      * the text {@code oldText} beginning at column {@code startColumn} is
      * replaced by {@code newText}.
+     *
+     * @param lineNumber  1-based
+     * @param startColumn 0-based column of {@code oldText} within the line.
      */
-    public static class LineReplacement {
-        public final int lineNumber; // 1-based
-        /** 0-based column of {@code oldText} within the line. */
-        public final int startColumn;
-        public final String oldText;
-        public final String newText;
-
-        public LineReplacement(int lineNumber, int startColumn, String oldText, String newText) {
-            this.lineNumber = lineNumber;
-            this.startColumn = startColumn;
-            this.oldText = oldText;
-            this.newText = newText;
-        }
-    }
+    public record LineReplacement(int lineNumber, int startColumn, String oldText, String newText) {}
 
     public String getText() {
         return textArea.getText();
