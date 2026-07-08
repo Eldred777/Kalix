@@ -1,9 +1,16 @@
 package com.kalix.ide.editor;
 
+import com.kalix.ide.components.KalixIniTextArea;
+import com.kalix.ide.icons.MenuIcons;
+import com.kalix.ide.linter.LinterManager;
+import com.kalix.ide.linter.SchemaManager;
+import com.kalix.ide.linter.factories.LinterComponentFactory;
+import com.kalix.ide.themes.SyntaxTheme;
+import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
+import org.fife.ui.rtextarea.RTextArea;
+import org.fife.ui.rtextarea.RTextScrollPane;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.kalix.ide.icons.MenuIcons;
 
 import javax.swing.AbstractAction;
 import javax.swing.Action;
@@ -22,20 +29,13 @@ import javax.swing.event.DocumentEvent;
 import javax.swing.event.DocumentListener;
 import java.awt.BorderLayout;
 import java.awt.Color;
+import java.awt.Point;
 import java.awt.event.ActionEvent;
 import java.awt.event.InputEvent;
+import java.awt.event.KeyAdapter;
 import java.awt.event.KeyEvent;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
-
-import org.fife.ui.rsyntaxtextarea.RSyntaxTextArea;
-import org.fife.ui.rtextarea.RTextScrollPane;
-
-import com.kalix.ide.components.KalixIniTextArea;
-import com.kalix.ide.linter.LinterManager;
-import com.kalix.ide.linter.SchemaManager;
-import com.kalix.ide.linter.factories.LinterComponentFactory;
-import com.kalix.ide.themes.SyntaxTheme;
 
 /**
  * Simplified enhanced text editor component with professional code editor features.
@@ -580,6 +580,26 @@ public class EnhancedTextEditor extends JPanel {
      * Sets up the right-click context menu with context-aware commands.
      */
     private void setupContextMenu() {
+        textArea.addKeyListener(new KeyAdapter() {
+            @Override
+            public void keyPressed(KeyEvent e) {
+                if (e.getKeyCode() == KeyEvent.VK_CONTEXT_MENU) {
+                    showContextMenu(e);
+                }
+                super.keyPressed(e);
+            }
+
+            private void showContextMenu(KeyEvent e) {
+                Point caretPosition = textArea.getCaret().getMagicCaretPosition();
+
+                // Build a fresh menu each time
+                JPopupMenu menu = createContextMenu();
+
+                // Show menu at click location
+                menu.show(e.getComponent(), caretPosition.x, caretPosition.y);
+            }
+        });
+
         textArea.addMouseListener(new MouseAdapter() {
             @Override
             public void mousePressed(MouseEvent e) {
