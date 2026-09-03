@@ -10,8 +10,10 @@ import org.kordamp.ikonli.swing.FontIcon;
 import javax.swing.Icon;
 import javax.swing.JLabel;
 import javax.swing.JList;
+import javax.swing.JPanel;
 import javax.swing.ListCellRenderer;
 
+import java.awt.BorderLayout;
 import java.awt.Color;
 import java.awt.Component;
 
@@ -19,13 +21,29 @@ import static com.kalix.ide.windows.ToolbarConstants.BUTTON_ICON_SIZE;
 import static com.kalix.ide.windows.ToolbarConstants.HORIZONTAL_SPACING;
 
 /**
- * Renders each {@link PlotType} combo-box item as its display name plus a mask glyph showing
- * whether that plot type starts with overlapping-data masking on
- * ({@link PlotType#isDataMaskDefault()}) — a plain mask when it does, a slashed mask when it
- * doesn't. FontAwesome 6 Free ships no "mask-slash" glyph, so the slashed version is
- * composited via {@link OverlayIcon}.
+ * Renders each {@link PlotType} combo-box item as its display name (left-aligned) plus a glyph
+ * (right-aligned) showing whether that plot type starts with overlapping-data masking on
+ * ({@link PlotType#isDataMaskDefault()}).
  */
 public class PlotTypeListCellRenderer implements ListCellRenderer<PlotType> {
+
+    /** Same footprint as the real mask glyph, painted as nothing — see the class doc. */
+    private static final Icon BLANK_ICON = new Icon() {
+        @Override
+        public void paintIcon(Component c, java.awt.Graphics g, int x, int y) {
+            // Intentionally blank.
+        }
+
+        @Override
+        public int getIconWidth() {
+            return BUTTON_ICON_SIZE;
+        }
+
+        @Override
+        public int getIconHeight() {
+            return BUTTON_ICON_SIZE;
+        }
+    };
 
     @Override
     public Component getListCellRendererComponent(
@@ -38,26 +56,30 @@ public class PlotTypeListCellRenderer implements ListCellRenderer<PlotType> {
         Color background = isSelected ? list.getSelectionBackground() : list.getBackground();
         Color foreground = isSelected ? list.getSelectionForeground() : list.getForeground();
 
-        JLabel label;
-        if (value == null) {
-            label = new JLabel();
+        JPanel panel = new JPanel(new BorderLayout(HORIZONTAL_SPACING, 0));
+        panel.setOpaque(true);
+        panel.setBackground(background);
+
+        JLabel textLabel = new JLabel(value == null ? "" : value.getDisplayName());
+        textLabel.setForeground(foreground);
+        panel.add(textLabel, BorderLayout.WEST);
+
+        Icon icon;
+        if (value == null || index == -1) {
+            // Toolbar's own closed-state display (or the null-value case): no visible glyph,
+            // but still occupy the glyph's width — see the class doc.
+            icon = BLANK_ICON;
         } else {
             // Icon colour follows the row's own background (selected vs. not) rather than a
             // fixed colour, so the glyph stays legible across both light and dark themes and
             // across the highlighted/unhighlighted state within the same popup.
             Color iconColor = ThemeUtils.iconColor(background);
-            Icon icon = value.isDataMaskDefault()
+            icon = value.isDataMaskDefault()
                 ? FontIcon.of(FontAwesomeSolid.MASK, BUTTON_ICON_SIZE, iconColor)
-                : OverlayIcon.of(FontAwesomeSolid.MASK, iconColor, FontAwesomeSolid.SLASH, iconColor, BUTTON_ICON_SIZE);
-            label = new JLabel(value.getDisplayName(), icon, JLabel.LEFT);
-            label.setIconTextGap(HORIZONTAL_SPACING);
+                : FontIcon.of(FontAwesomeSolid.BAN, BUTTON_ICON_SIZE, iconColor);
         }
+        panel.add(new JLabel(icon), BorderLayout.EAST);
 
-        // A JLabel paints no background unless told to — without this, isSelected/foreground
-        // below would have no visible effect and the popup would show no highlighted row.
-        label.setOpaque(true);
-        label.setBackground(background);
-        label.setForeground(foreground);
-        return label;
+        return panel;
     }
 }
