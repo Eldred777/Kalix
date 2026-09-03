@@ -6,6 +6,7 @@ import com.kalix.ide.utils.ThemeUtils;
 import org.kordamp.ikonli.fontawesome6.FontAwesomeSolid;
 import org.kordamp.ikonli.swing.FontIcon;
 
+import javax.swing.BorderFactory;
 import javax.swing.Icon;
 import javax.swing.JLabel;
 import javax.swing.JList;
@@ -61,6 +62,7 @@ public class PlotTypeListCellRenderer implements ListCellRenderer<PlotType> {
 
         JLabel textLabel = new JLabel(value == null ? "" : value.getDisplayName());
         textLabel.setForeground(foreground);
+        textLabel.setBorder(BorderFactory.createEmptyBorder(2, HORIZONTAL_SPACING, 2, 0));
         panel.add(textLabel, BorderLayout.WEST);
 
         Icon icon;
@@ -77,7 +79,14 @@ public class PlotTypeListCellRenderer implements ListCellRenderer<PlotType> {
                 ? FontIcon.of(FontAwesomeSolid.MASK, BUTTON_ICON_SIZE, iconColor)
                 : FontIcon.of(FontAwesomeSolid.BAN, BUTTON_ICON_SIZE, iconColor);
         }
-        panel.add(new JLabel(icon), BorderLayout.EAST);
+        // Every icon (whichever glyph, or the blank placeholder) sits in the same padded box
+        // rather than flush against the row's edge, so rows stay visually uniform regardless
+        // of which glyph is showing (FontIcon already reports the same square footprint for
+        // every glyph - this is about breathing room, not the reported size). No left padding
+        // here: that gap already comes from the BorderLayout hgap between the two labels.
+        JLabel iconLabel = new JLabel(icon);
+        iconLabel.setBorder(BorderFactory.createEmptyBorder(2, 0, 2, HORIZONTAL_SPACING));
+        panel.add(iconLabel, BorderLayout.EAST);
 
         return panel;
     }
