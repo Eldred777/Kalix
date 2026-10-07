@@ -1,6 +1,8 @@
 package com.kalix.ide.windows;
 
 import com.kalix.ide.components.JCheckboxTree;
+import com.kalix.ide.components.TreeHoverHighlight;
+import com.kalix.ide.components.TreeRows;
 import com.kalix.ide.flowviz.VisualizationTabManager;
 import com.kalix.ide.flowviz.VizHost;
 import com.kalix.ide.flowviz.data.DerivedSeriesLabel;
@@ -348,10 +350,7 @@ public class RunManager extends JFrame {
         timeseriesSourceTree = new JCheckboxTree(treeModel) {
             @Override
             public String getToolTipText(MouseEvent evt) {
-                if (getRowForLocation(evt.getX(), evt.getY()) == -1) {
-                    return null;
-                }
-                TreePath curPath = getPathForLocation(evt.getX(), evt.getY());
+                TreePath curPath = TreeRows.fullWidthPathAt(this, evt.getY());
                 if (curPath == null) {
                     return null;
                 }
@@ -409,7 +408,7 @@ public class RunManager extends JFrame {
         // Add checked-state listener to fetch timeseries data for leaf nodes and update plot
         timeseriesTree.addCheckChangeListener(this::onOutputsTreeCheckedChanged);
 
-        timeseriesScrollPane = new JScrollPane(timeseriesTree);
+        timeseriesScrollPane = new JScrollPane(TreeHoverHighlight.install(timeseriesTree));
 
         // Initialize tree filter manager
         treeFilterManager = new TreeFilterManager(this::onFilterTextChanged);
@@ -477,7 +476,7 @@ public class RunManager extends JFrame {
         // Top of left side: timeseries source tree
         JPanel runsPanel = new JPanel(new BorderLayout());
         runsPanel.setBorder(BorderFactory.createTitledBorder("Kalix"));
-        JScrollPane treeScrollPane = new JScrollPane(timeseriesSourceTree);
+        JScrollPane treeScrollPane = new JScrollPane(TreeHoverHighlight.install(timeseriesSourceTree));
         runsPanel.add(treeScrollPane, BorderLayout.CENTER);
 
         // Bottom of left side: timeseries tree with filter
