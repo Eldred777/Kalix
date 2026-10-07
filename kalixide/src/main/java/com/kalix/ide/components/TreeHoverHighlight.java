@@ -31,8 +31,8 @@ public final class TreeHoverHighlight extends LayerUI<JTree> {
     // Where the pointer is, in the layer's parent's coordinates (the viewport, when scrolled);
     // null while it is off the tree. That frame stays put while the tree scrolls beneath it.
     private Point pointer;
-    // The row last highlighted. Only decides what to repaint: painting works from `pointer`,
-    // so a row index gone stale after an expand, collapse or model change is never drawn.
+    // The row last highlighted. Re-derived from `pointer` before every paint, so a row index
+    // gone stale after a scroll, expand, collapse or model change is never drawn.
     private int highlightedRow = -1;
 
     private TreeHoverHighlight(JTree tree) {
@@ -76,8 +76,10 @@ public final class TreeHoverHighlight extends LayerUI<JTree> {
     @Override
     public void paint(Graphics g, JComponent c) {
         super.paint(g, c);
-        int row = rowUnderPointer();
-        highlightedRow = row;
+        // This paint may cover only a strip (a blit scroll paints just what it exposed), so
+        // a row change seen here still needs its rows repainted, not just recorded.
+        refresh();
+        int row = highlightedRow;
         if (row < 0 || tree.isRowSelected(row)) {
             return;
         }

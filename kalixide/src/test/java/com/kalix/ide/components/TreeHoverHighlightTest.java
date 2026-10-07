@@ -10,13 +10,18 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import java.awt.Component;
 import java.awt.Container;
+import java.awt.EventQueue;
 import java.awt.Graphics2D;
 import java.awt.Point;
+import java.awt.Rectangle;
 import java.awt.event.MouseEvent;
 import java.awt.image.BufferedImage;
+import java.util.ArrayList;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Paints a hover-highlighted tree off screen and reads pixels at the far right of its rows,
@@ -28,6 +33,8 @@ class TreeHoverHighlightTest {
     private static final int WIDTH = 300;
     private static final int HEIGHT = 200;
 
+    // Every region the tree was asked to repaint, in tree coordinates.
+    private final List<Rectangle> repaints = new ArrayList<>();
     private JTree tree;
     private JLayer<JTree> layer;
     private JScrollPane scroll;
@@ -38,7 +45,13 @@ class TreeHoverHighlightTest {
         for (int i = 0; i < 39; i++) {
             root.add(new DefaultMutableTreeNode("n" + i));
         }
-        tree = new JTree(new DefaultTreeModel(root));
+        tree = new JTree(new DefaultTreeModel(root)) {
+            @Override
+            public void repaint(long tm, int x, int y, int width, int height) {
+                repaints.add(new Rectangle(x, y, width, height));
+                super.repaint(tm, x, y, width, height);
+            }
+        };
         tree.setRowHeight(ROW_HEIGHT);
         layer = TreeHoverHighlight.install(tree);
         scroll = new JScrollPane(layer);
@@ -116,6 +129,39 @@ class TreeHoverHighlightTest {
         // Tree row 7 has scrolled under the pointer; row 2's wash must not travel with it.
         assertNotEquals(plain, rightEndOfViewportRow(2));
         assertEquals(plain, rightEndOfViewportRow(3));
+    }
+
+    /**
+     * Blit scrolling copies the pixels already on screen, wash included, and paints only
+     * the newly exposed strip, so the rows the wash left and entered need their own repaint.
+     */
+    @Test
+    void scrollRepaintsTheRowsTheWashLeftAndEntered() throws Exception {
+        hoverViewportRow(2);
+        rightEndOfViewportRow(2);
+
+        EventQueue.invokeAndWait(() -> {
+            scroll.getViewport().setViewPosition(new Point(0, 5 * ROW_HEIGHT));
+            repaints.clear();
+            paintExposedStrip();
+        });
+        // Let the scroll's own component event through.
+        EventQueue.invokeAndWait(() -> { });
+
+        assertTrue(repaints.contains(rowBounds(2)), "row the wash left: " + repaints);
+        assertTrue(repaints.contains(rowBounds(7)), "row the wash entered: " + repaints);
+    }
+
+    private void paintExposedStrip() {
+        BufferedImage image = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
+        Graphics2D g = image.createGraphics();
+        g.setClip(0, HEIGHT - ROW_HEIGHT, WIDTH, ROW_HEIGHT);
+        scroll.paint(g);
+        g.dispose();
+    }
+
+    private Rectangle rowBounds(int row) {
+        return new Rectangle(0, row * ROW_HEIGHT, tree.getWidth(), ROW_HEIGHT);
     }
 
     @Test
