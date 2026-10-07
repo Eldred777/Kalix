@@ -408,7 +408,7 @@ public class RunManager extends JFrame {
         // Add checked-state listener to fetch timeseries data for leaf nodes and update plot
         timeseriesTree.addCheckChangeListener(this::onOutputsTreeCheckedChanged);
 
-        timeseriesScrollPane = new JScrollPane(TreeHoverHighlight.install(timeseriesTree));
+        timeseriesScrollPane = new JScrollPane(timeseriesTree);
 
         // Initialize tree filter manager
         treeFilterManager = new TreeFilterManager(this::onFilterTextChanged);
@@ -476,14 +476,14 @@ public class RunManager extends JFrame {
         // Top of left side: timeseries source tree
         JPanel runsPanel = new JPanel(new BorderLayout());
         runsPanel.setBorder(BorderFactory.createTitledBorder("Kalix"));
-        JScrollPane treeScrollPane = new JScrollPane(TreeHoverHighlight.install(timeseriesSourceTree));
-        runsPanel.add(treeScrollPane, BorderLayout.CENTER);
+        JScrollPane treeScrollPane = new JScrollPane(timeseriesSourceTree);
+        runsPanel.add(TreeHoverHighlight.install(timeseriesSourceTree, treeScrollPane), BorderLayout.CENTER);
 
         // Bottom of left side: timeseries tree with filter
         JPanel timeseriesPanel = new JPanel(new BorderLayout());
         timeseriesPanel.setBorder(BorderFactory.createTitledBorder("Timeseries"));
         timeseriesPanel.add(treeFilterManager.getFilterPanel(), BorderLayout.NORTH);
-        timeseriesPanel.add(timeseriesScrollPane, BorderLayout.CENTER);
+        timeseriesPanel.add(TreeHoverHighlight.install(timeseriesTree, timeseriesScrollPane), BorderLayout.CENTER);
 
         leftSplitPane.setTopComponent(runsPanel);
         leftSplitPane.setBottomComponent(timeseriesPanel);

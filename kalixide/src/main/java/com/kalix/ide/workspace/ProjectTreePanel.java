@@ -44,12 +44,12 @@ public class ProjectTreePanel extends JPanel {
         // as right-clicking empty tree space (ADR-0002 §4).
         header.addMouseListener(new PopupTriggerListener(
             e -> tree.showRootContextMenu(header, e.getX(), e.getY())));
-        JScrollPane scroll = new JScrollPane(TreeHoverHighlight.install(tree));
+        JScrollPane scroll = new JScrollPane(tree);
         scroll.setBorder(null);
         scroll.putClientProperty("JScrollPane.smoothScrolling", Boolean.TRUE);
 
         add(header, BorderLayout.NORTH);
-        add(scroll, BorderLayout.CENTER);
+        add(TreeHoverHighlight.install(tree, scroll), BorderLayout.CENTER);
     }
 
     /** Opens the given folder: loads the tree and sets the header to the folder name. */

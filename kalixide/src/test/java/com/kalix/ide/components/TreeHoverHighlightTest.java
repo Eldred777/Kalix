@@ -10,7 +10,6 @@ import javax.swing.tree.DefaultMutableTreeNode;
 import javax.swing.tree.DefaultTreeModel;
 import java.awt.Component;
 import java.awt.Container;
-import java.awt.EventQueue;
 import java.awt.Graphics2D;
 import java.awt.Point;
 import java.awt.Rectangle;
@@ -21,6 +20,7 @@ import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotEquals;
+import static org.junit.jupiter.api.Assertions.assertSame;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
@@ -36,8 +36,8 @@ class TreeHoverHighlightTest {
     // Every region the tree was asked to repaint, in tree coordinates.
     private final List<Rectangle> repaints = new ArrayList<>();
     private JTree tree;
-    private JLayer<JTree> layer;
     private JScrollPane scroll;
+    private JLayer<JScrollPane> layer;
 
     @BeforeEach
     void setUp() {
@@ -53,11 +53,11 @@ class TreeHoverHighlightTest {
             }
         };
         tree.setRowHeight(ROW_HEIGHT);
-        layer = TreeHoverHighlight.install(tree);
-        scroll = new JScrollPane(layer);
+        scroll = new JScrollPane(tree);
         scroll.setBorder(null);
-        scroll.setSize(WIDTH, HEIGHT);
-        layOut(scroll);
+        layer = TreeHoverHighlight.install(tree, scroll);
+        layer.setSize(WIDTH, HEIGHT);
+        layOut(layer);
     }
 
     private static void layOut(Component component) {
@@ -81,11 +81,19 @@ class TreeHoverHighlightTest {
 
     /** The colour at the right-hand end of the row shown at {@code viewportRow}. */
     private int rightEndOfViewportRow(int viewportRow) {
+        return pixel(scroll.getViewport().getWidth() - 5, viewportRow);
+    }
+
+    /** The colour of the vertical scroll bar's track beside {@code viewportRow}. */
+    private int scrollBarBeside(int viewportRow) {
+        return pixel(WIDTH - 2, viewportRow);
+    }
+
+    private int pixel(int x, int viewportRow) {
         BufferedImage image = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
         Graphics2D g = image.createGraphics();
-        scroll.paint(g);
+        layer.paint(g);
         g.dispose();
-        int x = scroll.getViewport().getWidth() - 5;
         return image.getRGB(x, viewportRow * ROW_HEIGHT + ROW_HEIGHT / 2);
     }
 
@@ -97,6 +105,24 @@ class TreeHoverHighlightTest {
 
         assertNotEquals(plain, rightEndOfViewportRow(2));
         assertEquals(plain, rightEndOfViewportRow(3));
+    }
+
+    @Test
+    void washStopsAtTheViewportEdge() {
+        int bar = scrollBarBeside(2);
+
+        hoverViewportRow(2);
+
+        assertEquals(bar, scrollBarBeside(2));
+    }
+
+    /**
+     * The look and feel decides whether the scroll pane holds the focus by looking at the
+     * viewport's view, so the highlight must not put anything between the two.
+     */
+    @Test
+    void treeStaysTheViewportsView() {
+        assertSame(tree, scroll.getViewport().getView());
     }
 
     @Test
@@ -136,28 +162,15 @@ class TreeHoverHighlightTest {
      * the newly exposed strip, so the rows the wash left and entered need their own repaint.
      */
     @Test
-    void scrollRepaintsTheRowsTheWashLeftAndEntered() throws Exception {
+    void scrollRepaintsTheRowsTheWashLeftAndEntered() {
         hoverViewportRow(2);
         rightEndOfViewportRow(2);
+        repaints.clear();
 
-        EventQueue.invokeAndWait(() -> {
-            scroll.getViewport().setViewPosition(new Point(0, 5 * ROW_HEIGHT));
-            repaints.clear();
-            paintExposedStrip();
-        });
-        // Let the scroll's own component event through.
-        EventQueue.invokeAndWait(() -> { });
+        scroll.getViewport().setViewPosition(new Point(0, 5 * ROW_HEIGHT));
 
         assertTrue(repaints.contains(rowBounds(2)), "row the wash left: " + repaints);
         assertTrue(repaints.contains(rowBounds(7)), "row the wash entered: " + repaints);
-    }
-
-    private void paintExposedStrip() {
-        BufferedImage image = new BufferedImage(WIDTH, HEIGHT, BufferedImage.TYPE_INT_RGB);
-        Graphics2D g = image.createGraphics();
-        g.setClip(0, HEIGHT - ROW_HEIGHT, WIDTH, ROW_HEIGHT);
-        scroll.paint(g);
-        g.dispose();
     }
 
     private Rectangle rowBounds(int row) {
@@ -171,7 +184,7 @@ class TreeHoverHighlightTest {
 
         root.removeAllChildren();
         ((DefaultTreeModel) tree.getModel()).reload();
-        layOut(scroll);
+        layOut(layer);
 
         // Only the root row is left, so the pointer is over empty space.
         assertEquals(rightEndOfViewportRow(3), rightEndOfViewportRow(2));

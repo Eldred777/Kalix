@@ -38,7 +38,7 @@ import java.util.Set;
  * Rename, Delete, Refresh), and open-on-double-click / Enter (zip archives are unzipped
  * instead of opened). Files are opened through the supplied consumer (which adds them as
  * editor tabs). The full-width row hover is added by {@code ProjectTreePanel}, which shows
- * the tree through a {@code TreeHoverHighlight} layer.
+ * the tree's scroll pane through a {@code TreeHoverHighlight} layer.
  *
  * <p>All model mutations happen on the EDT; watcher callbacks marshal onto it.
  */
