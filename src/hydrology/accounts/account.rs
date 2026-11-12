@@ -137,13 +137,13 @@ impl Account {
     // Add some value to the account balance without checking the validity
     // of the resulting account balance.
     pub fn credit_account_fast(&mut self, amount: f64) {
-        self.balance = self.balance + amount;
+        self.balance += amount;
     }
 
     // Subtract some value from the account balance without checking the validity
     // of the resulting account balance.
     pub fn debit_account_fast(&mut self, amount: f64) {
-        self.balance = self.balance - amount;
+        self.balance -= amount;
     }
 
     // Sets the account balance to the given fraction of the account size

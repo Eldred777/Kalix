@@ -39,6 +39,7 @@ const DS_4_OUTLET: u8 = 3; //ds_4 is outlet 3
 /// * `ini_doc` - The parsed INI document
 /// * `working_directory` - Optional working directory for resolving relative paths.
 ///   If None, uses the current working directory.
+///
 /// The (node type, property) pairs whose declared value is registered into
 /// `DataCache::static_properties` at load, making them readable from any
 /// expression as `node.<name>.<property>`. Single source of truth: the load
@@ -433,14 +434,13 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<Pa
                     .map_err(|_| KalixIoError::Parse(format!("Error on line {}: Value for constant '{}': must be a number", ini_property.line_number, ini_property.value)))?;
                 model.data_cache.constants.set_value(const_name.as_str(), const_value);
             }
-        } else if section_name.starts_with("node.") {
+        } else if let Some(node_name) = section_name.strip_prefix("node.") {
             // -------------------------------------------------------------------------------------
             // Parsing nodes
             // -------------------------------------------------------------------------------------
             seen_node_section = true;
 
             // Get the name and type
-            let node_name = &section_name[5..];
             let self_context = format!("node.{}", node_name);
             let self_ctx = Some(self_context.as_str());
             let node_type = ini_section.properties.get("type")
@@ -1042,7 +1042,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<Pa
                                     // holds flat beyond the ends; a repeated level is an
                                     // explicit step.
                                     let pairs: Vec<(f64, f64)> = params
-                                        .chunks_exact(2)
+                                        .as_chunks::<2>().0.iter()
                                         .map(|c| (c[0], c[1]))
                                         .collect();
                                     for w in pairs.windows(2) {
@@ -1290,7 +1290,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<Pa
                                 .ok_or_else(|| KalixIoError::Validate(format!("Error on line {}: No crop '{}' is declared for the fallow of node '{}' (a [crop.{}] section)", ini_property.line_number, v, node_name, v)))?;
                             n.fallow = Some(model.crops.get(idx).clone());
                         } else if let Some((slot_n, suffix)) = crop_slot_property(&name_lower) {
-                            if slot_n < 1 || slot_n > MAX_CROPS {
+                            if !(1..=MAX_CROPS).contains(&slot_n) {
                                 return Err(KalixIoError::Validate(format!("Error on line {}: '{}' for node '{}': crop slots are numbered crop_1 to crop_{}", ini_property.line_number, name, node_name, MAX_CROPS)));
                             }
                             slot_props.push((slot_n, suffix, v.to_string(), ini_property.line_number));
@@ -1350,14 +1350,13 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<Pa
                 }
                 model.outputs.push(name);
             }
-        } else if section_name.starts_with("var.") {
+        } else if let Some(block_name) = section_name.strip_prefix("var.") {
             // -------------------------------------------------------------------------------------
             // Var blocks: published calculations, ACTIVE at this file position
             // (structured_expressions_design.md §9). Unlike tables and fns,
             // their position among the node sections is part of their meaning:
             // they execute here, reading anything computed above.
             // -------------------------------------------------------------------------------------
-            let block_name = &section_name[4..];
             if !is_valid_bare_name(block_name) {
                 return Err(KalixIoError::Parse(format!("Error on line {}: Invalid var block name '{}'",
                                    ini_section.line_number, block_name)));
@@ -1942,11 +1941,9 @@ pub fn render_canonical_0_0_1(model: &Model) -> IniDocument {
                 } else if !n.account_tree.is_empty() {
                     ini_doc.set_property(section_name.as_str(), "accounts", n.account_tree.render(&model.account_manager).as_str());
                 }
-                match n.annual_cap {
-                    Some(cap) => {
-                        let value_str = format!("{},{}", cap, n.annual_cap_reset_month);
-                        ini_doc.set_property(section_name.as_str(), "annual_cap", value_str.as_str()); }
-                    None => {}
+                if let Some(cap) = n.annual_cap {
+                    let value_str = format!("{},{}", cap, n.annual_cap_reset_month);
+                    ini_doc.set_property(section_name.as_str(), "annual_cap", value_str.as_str());
                 }
                 if n.demand_carryover_allowed {
                     let value = match n.demand_carryover_reset_month {
@@ -2109,7 +2106,7 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
 
             for (section_name, current_section) in &current.sections {
                 let unchanged = baseline.sections.get(section_name)
-                    .map_or(false, |base| sections_canonically_equal(base, current_section));
+                    .is_some_and(|base| sections_canonically_equal(base, current_section));
 
                 if unchanged && out.sections.contains_key(section_name) {
                     // Keep the original section verbatim (preserves raw_lines and comments).
@@ -2212,7 +2209,7 @@ fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData
     if data.is_empty() {
         return Err("Accounts table has a header but no account rows".to_string());
     }
-    if data.len() % n_cols != 0 {
+    if !data.len().is_multiple_of(n_cols) {
         return Err(format!(
             "Accounts table is malformed: {} data cells is not a whole number of {}-column rows \
             (an unrecognised column name in the header reads as data — allowed columns: {})",
@@ -2251,9 +2248,8 @@ fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData
                     size = cell.parse::<f64>()
                         .map_err(|_| format!("Invalid size '{}' for account '{}': must be a number",
                             cell, table_name))?;
-                    // Written as !(size >= 0.0), not size < 0.0, so NaN (which parses fine as f64
-                    // but fails every comparison) is caught here too instead of slipping through.
-                    if !(size >= 0.0) {
+                    // NaN parses fine as f64 but fails every comparison, so it is caught explicitly
+                    if size.is_nan() || size < 0.0 {
                         return Err(format!("Account '{}' has negative size {}",
                             table_name, size));
                     }
@@ -2275,8 +2271,7 @@ fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData
                     debit_factor = cell.parse::<f64>()
                         .map_err(|_| format!("Invalid debit_factor '{}' for account '{}': must be a number",
                             cell, table_name))?;
-                    // !(x >= 0.0) so NaN is caught too
-                    if !(debit_factor >= 0.0) {
+                    if debit_factor.is_nan() || debit_factor < 0.0 {
                         return Err(format!("Account '{}' has negative debit_factor {}",
                             table_name, debit_factor));
                     }
@@ -2285,14 +2280,14 @@ fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData
             }
         }
         model.data_cache.static_properties.set_value(
-            &format!("acc.{}.size", &table_name.as_str()), 
+            &format!("acc.{}.size", table_name),
             size);
         if initial < 0.0 || initial > size {
             return Err(format!("Account '{}' has initial balance {} outside [0, size={}]",
                 table_name, initial, size));
         }
         model.data_cache.static_properties.set_value(
-            &format!("acc.{}.initial", &table_name.as_str()),
+            &format!("acc.{}.initial", table_name),
             initial);
         table.names.push(table_name);
         table.sizes.push(size);
@@ -2558,7 +2553,7 @@ fn render_routing_node<const USING_REACH_LOSS: bool>(ini_doc: &mut IniDocument, 
         set_property_if_not_empty(ini_doc, section_name.as_str(), "nlm", format!("{}, {}", k, m).as_str());
     } else {
         let pwl_values = n.get_routing_table_as_vec();
-        if pwl_values.len() > 0 {
+        if !pwl_values.is_empty() {
             let pwl_values_str = format_vec_as_multiline_table(pwl_values.as_slice(), 2, 4);
             ini_doc.set_property(section_name.as_str(), "pwl", pwl_values_str.as_str());
         }
