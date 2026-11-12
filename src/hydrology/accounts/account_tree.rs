@@ -136,7 +136,7 @@ impl AccountTree {
     #[inline(always)]
     pub fn debitable(&self, account_manager: &AccountManager) -> f64 {
         let (op, inner, _) = first_subtree(&self.terms);
-        fold(op, inner, &|idx| debitable_of(account_manager, idx))
+        fold(op, inner, &|idx| account_manager.get_account_debitable(idx))
     }
 
     /// As `debitable`, over what each account can still cover: its balance less the orders
@@ -144,7 +144,7 @@ impl AccountTree {
     #[inline(always)]
     pub fn uncommitted_debitable(&self, account_manager: &AccountManager) -> f64 {
         let (op, inner, _) = first_subtree(&self.terms);
-        fold(op, inner, &|idx| uncommitted_debitable_of(account_manager, idx))
+        fold(op, inner, &|idx| account_manager.get_account_uncommitted_debitable(idx))
     }
 
     /// Debit a take: left to right through `|`, filling each account before the next, and in
@@ -158,15 +158,15 @@ impl AccountTree {
         }
         let (op, inner, _) = first_subtree(&self.terms);
         let leaf = &mut |account_manager: &mut AccountManager, idx: usize, remaining: f64| {
-            let take = remaining.min(debitable_of(account_manager, idx));
+            let take = remaining.min(account_manager.get_account_debitable(idx));
             if take > 0.0 {
                 account_manager.debit_account(idx, take);
             }
             take
         };
         match op {
-            Term::All(_) => each_side_body!(inner, amount, account_manager, &debitable_of, leaf, walk),
-            _ => { walk(op, inner, amount, account_manager, &debitable_of, leaf); }
+            Term::All(_) => each_side_body!(inner, amount, account_manager, &AccountManager::get_account_debitable, leaf, walk),
+            _ => { walk(op, inner, amount, account_manager, &AccountManager::get_account_debitable, leaf); }
         }
     }
 
@@ -181,7 +181,7 @@ impl AccountTree {
         }
         let (op, inner, _) = first_subtree(&self.terms);
         let leaf = &mut |account_manager: &mut AccountManager, idx: usize, remaining: f64| {
-            let commit = remaining.min(uncommitted_debitable_of(account_manager, idx));
+            let commit = remaining.min(account_manager.get_account_uncommitted_debitable(idx));
             if commit > 0.0 {
                 account_manager.commit_account(idx, commit, due_in);
             }
@@ -199,7 +199,7 @@ impl AccountTree {
                         _ => {
                             let (side_inner, after) = after.split_at(subtree_len(side));
                             rest = after;
-                            let taken = walk(side, side_inner, amount, account_manager, &uncommitted_debitable_of, leaf);
+                            let taken = walk(side, side_inner, amount, account_manager, &AccountManager::get_account_uncommitted_debitable, leaf);
                             if taken < amount {
                                 account_manager.commit_account(first_account(side_inner), amount - taken, due_in);
                             }
@@ -208,23 +208,13 @@ impl AccountTree {
                 }
             }
             _ => {
-                let taken = walk(op, inner, amount, account_manager, &uncommitted_debitable_of, leaf);
+                let taken = walk(op, inner, amount, account_manager, &AccountManager::get_account_uncommitted_debitable, leaf);
                 if taken < amount {
                     account_manager.commit_account(first_account(inner), amount - taken, due_in);
                 }
             }
         }
     }
-}
-
-#[inline(always)]
-fn debitable_of(account_manager: &AccountManager, idx: usize) -> f64 {
-    account_manager.get_account_debitable(idx)
-}
-
-#[inline(always)]
-fn uncommitted_debitable_of(account_manager: &AccountManager, idx: usize) -> f64 {
-    account_manager.get_account_uncommitted_debitable(idx)
 }
 
 /// A subtree is its operator followed by the `len` terms beneath it, so the terms beneath an

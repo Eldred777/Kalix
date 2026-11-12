@@ -370,7 +370,7 @@ impl AccountManager {
     /// over its debit factor. In water, not balance: debiting all of it
     /// charges the whole balance. Takes read this; [ras.*] reads the raw
     /// balance through get_account_balance.
-    #[inline]
+    #[inline(always)]
     pub fn get_account_debitable(&self, account_id: usize) -> f64 {
         let account = &self.accounts[account_id];
         // Multiply before the max: the result is never NaN, which keeps callers' min() one instruction
@@ -401,7 +401,7 @@ impl AccountManager {
     /// balance less the orders already en route, floored at zero (a RAS cut can
     /// leave the committed orders above the balance until they fall due), over
     /// the debit factor.
-    #[inline]
+    #[inline(always)]
     pub fn get_account_uncommitted_debitable(&self, account_id: usize) -> f64 {
         let account = &self.accounts[account_id];
         ((account.balance - account.committed) * account.inv_debit_factor).max(0.0)
