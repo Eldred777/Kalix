@@ -131,10 +131,10 @@ impl AccountManager {
 
         // Check the name doesn't clash (accounts and groups share the acc. namespace)
         if self.account_lookup.contains_key(&account.name) {
-            return Err(format!("Tried to create account '{}' more than once.", &account.name));
+            return Err(format!("Tried to create account '{}' more than once.", account.name));
         }
         if self.group_lookup.contains_key(&account.name) {
-            return Err(format!("Account '{}' clashes with an account group of the same name.", &account.name));
+            return Err(format!("Account '{}' clashes with an account group of the same name.", account.name));
         }
 
         // Add the account to the vec & hashmap
@@ -151,10 +151,10 @@ impl AccountManager {
     /// `acc.` namespace with account names: a collision either way is an error.
     pub fn add_group(&mut self, group: AccountGroup) -> Result<usize, String> {
         if self.group_lookup.contains_key(&group.name) {
-            return Err(format!("Tried to create account group '{}' more than once.", &group.name));
+            return Err(format!("Tried to create account group '{}' more than once.", group.name));
         }
         if self.account_lookup.contains_key(&group.name) {
-            return Err(format!("Account group '{}' clashes with an account of the same name.", &group.name));
+            return Err(format!("Account group '{}' clashes with an account of the same name.", group.name));
         }
         let idx = self.groups.len();
         self.group_lookup.insert(group.name.clone(), idx);
@@ -189,7 +189,7 @@ impl AccountManager {
         for account in &mut self.accounts {
             account.initialize();
         }
-        self.has_accounts = self.accounts.len() >= 1;
+        self.has_accounts = !self.accounts.is_empty();
 
         // No implicit behaviour: the old hard-coded water-year refill is gone.
         // Everything that changes a balance is a [ras.*] action (executed by
