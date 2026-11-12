@@ -24,6 +24,11 @@ pub struct Account {
     /// that wrote it and not both.
     pub pair_declared: bool,
 
+    /// Debit factor for the account. If present, this factor is used
+    /// to scale the amount debited from the account when a node takes water.
+    /// 1.0 by default.
+    pub debit_factor: f64,
+
     // State
     pub balance: f64,
     /// Debits from node takes so far this step. Reset at the top of every
@@ -70,7 +75,7 @@ pub struct Account {
 impl Account {
 
     // Constructor
-    pub fn new(name: String, account_type: String, size: f64, initial_balance: f64) -> Self {
+    pub fn new(name: String, account_type: String, size: f64, initial_balance: f64, debit_factor: f64) -> Self {
         Account {
             name,
             account_type,
@@ -78,6 +83,7 @@ impl Account {
             initial_balance,
             pair: None,
             pair_declared: false,
+            debit_factor,
             balance: initial_balance,
             debits_today: 0.0,
             debits_since_reset: 0.0,

@@ -249,6 +249,7 @@ pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<st
                     group_name.to_string(), // account_type carries the group name
                     table.sizes[row],
                     table.initials[row],
+                    table.debit_factors[row],
                 );
                 let account_idx = model.account_manager.add_account(account)
                     .map_err(|e| KalixIoError::Parse(format!("Error on line {}: {}", accounts_prop.line_number, e)))?;
@@ -2153,7 +2154,7 @@ pub fn model_to_ini_doc_0_0_1(model: &Model) -> IniDocument {
 /// ini parser stays row-agnostic — and strictness on unrecognised columns is
 /// what catches typos ('initail') at load. The set grows only when an engine
 /// feature consumes a new column.
-const ACCOUNT_TABLE_COLUMNS: [&str; 4] = ["name", "size", "initial", "pair"];
+const ACCOUNT_TABLE_COLUMNS: [&str; 5] = ["name", "size", "initial", "pair", "debit_factor"];
 
 struct AccountTableData {
     names: Vec<String>,
@@ -2163,6 +2164,8 @@ struct AccountTableData {
     /// Names, not indices: pairs may be declared in a later [acc.*] section,
     /// so resolution happens in a post-pass once every account exists.
     pairs: Option<Vec<String>>,
+    /// Debit factors (the `debit_factor` column), 1.0 where the column is absent.
+    debit_factors: Vec<f64>,
 }
 
 /// Parse the `accounts` property of an [acc.*] section: a headed table that
@@ -2218,11 +2221,13 @@ fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData
         sizes: Vec::new(),
         initials: Vec::new(),
         pairs: if header.iter().any(|h| h == "pair") { Some(Vec::new()) } else { None },
+        debit_factors: Vec::new(),
     };
     for row in data.chunks(n_cols) {
         let mut table_name = String::new();
         let mut size = f64::NAN;
         let mut initial = 0.0;
+        let mut debit_factor = 1.0;
         for (col_name, cell) in header.iter().zip(row.iter()) {
             match col_name.as_str() {
                 "name" => {
@@ -2263,6 +2268,16 @@ fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData
                     }
                     table.pairs.as_mut().expect("header contains pair").push(pair);
                 }
+                "debit_factor" => {
+                    debit_factor = cell.parse::<f64>()
+                        .map_err(|_| format!("Invalid debit_factor '{}' for account '{}': must be a number",
+                            cell, table_name))?;
+                    // !(x >= 0.0) so NaN is caught too
+                    if !(debit_factor >= 0.0) {
+                        return Err(format!("Account '{}' has negative debit_factor {}",
+                            table_name, debit_factor));
+                    }
+                }
                 _ => unreachable!("header is drawn from ACCOUNT_TABLE_COLUMNS"),
             }
         }
@@ -2279,6 +2294,7 @@ fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData
         table.names.push(table_name);
         table.sizes.push(size);
         table.initials.push(initial);
+        table.debit_factors.push(debit_factor);
     }
     Ok(table)
 }
@@ -2481,7 +2497,13 @@ fn format_account_group_table(manager: &crate::hydrology::accounts::account_mana
     let has_pair = group.member_ids.first()
         .and_then(|&idx| manager.get_account(idx))
         .is_some_and(|a| a.pair_declared);
-    let mut out = String::from(if has_pair { "name, size, initial, pair, " } else { "name, size, initial, " });
+    // Emitted only when some member departs from the 1.0 default, so models without it save unchanged
+    let has_debit_factor = group.member_ids.iter()
+        .filter_map(|&idx| manager.get_account(idx))
+        .any(|a| a.debit_factor != 1.0);
+    let mut out = String::from("name, size, initial, ");
+    if has_pair { out.push_str("pair, "); }
+    if has_debit_factor { out.push_str("debit_factor, "); }
     for &account_idx in &group.member_ids {
         if let Some(account) = manager.get_account(account_idx) {
             out.push('\n');
@@ -2493,6 +2515,9 @@ fn format_account_group_table(manager: &crate::hydrology::accounts::account_mana
                     .map(|a| a.name.as_str())
                     .expect("pair column is per-group all-or-nothing");
                 out.push_str(&format!("{}, ", pair_name));
+            }
+            if has_debit_factor {
+                out.push_str(&format!("{}, ", format_f64(account.debit_factor)));
             }
         }
     }
