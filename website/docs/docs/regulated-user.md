@@ -107,18 +107,24 @@ listed (the first is drawn down before the second). This is how an
 [allocation system](allocation-systems.md) limits the user: a low announced
 allocation means a low balance, which caps ordering. See [`[acc.*]`](accounts.md).
 
+An account with a [`debit_factor`](accounts.md#debit-factors) other than 1 is
+charged the water taken times its factor, so it covers its balance divided by
+the factor. The caps below are in water, each account's share divided by its
+factor; the order and the diversion stay in water.
+
 Where there is travel time between the supply and the user, the orders of the
 last few steps are still on their way, and the balance has not yet paid for
 them. The user allows for this: each accepted order is **committed** to the
 accounts until it falls due, and the cap on a new order is the balance less
 what is committed:
 
-`order ≤ Σ max(0, balance − committed)`, over the accounts listed
+`order ≤ Σ max(0, balance − committed) / debit_factor`, over the accounts listed
 
-The commitment is a forecast of the diversion to come, never a debit. On the
-step an order falls due the whole order leaves the commitment, delivered or not;
-what is then diverted is debited, and what is not is still in the balance and
-free to be ordered again from that step. So in a shortfall the user loses
+The commitment is a forecast of the diversion to come, never a debit, held in
+the amount its diversion will be charged. On the step an order falls due, what
+is diverted is debited; at the start of the next step the whole order leaves
+the commitment, delivered or not, and what was not diverted is still in the
+balance and free to be ordered again from that step. So in a shortfall the user loses
 nothing; it loses only the days the water was en route. The commitment lives on
 the account, not on the user, so two users drawing on one account each see the
 other's orders en route (`acc.<name>.committed`). A RAS action that lowers the
@@ -155,10 +161,12 @@ balance is still positive.
 `order_accounts` lists additional accounts that authorise ordering without
 supplying water — debit-on-order semantics. The contract:
 
-- The order cap becomes `min(order, Σaccounts + Σorder_accounts)`.
+- The order cap becomes `min(order, Σaccounts + Σorder_accounts)`, each
+  account counting its balance divided by its `debit_factor`.
 - Only the **excess** of the approved order over what the regular `accounts`
   can still cover (balance less orders en route) is debited from the
-  `order_accounts`, walked in list order, at order time. Orders within the
+  `order_accounts`, walked in list order, at order time, each at its own
+  `debit_factor`. Orders within the
   regular balance never touch them.
 - They are **invisible to the flow phase**: they never extend the delivery
   cap, are never debited by takes, and are not refunded when an

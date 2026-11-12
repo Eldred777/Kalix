@@ -81,6 +81,10 @@ listed. This lets an [allocation system](allocation-systems.md) govern
 opportunistic take — for example an account credited only on flow events. See
 [`[acc.*]`](accounts.md).
 
+An account with a [`debit_factor`](accounts.md#debit-factors) other than 1 is
+charged the diversion times its factor, so it makes available its balance
+divided by the factor. The diversion stays in water.
+
 When `accounts` is a [combination](accounts.md#combining-accounts),
 availability is what the combination makes available of the balances: `|` sums
 its sides and `&` takes the least. The diversion is debited left to right
