@@ -15,6 +15,7 @@
 // 6. EXACT AT THE LIMIT: a take or order that uses all an account allows charges
 //    or commits exactly what was left, however (balance / f) * f rounds.
 use crate::io::ini_model_io::IniModelIO;
+use crate::misc::configuration::SaveMethod;
 use crate::model::Model;
 
 fn load(ini: &str) -> Model {
@@ -299,4 +300,49 @@ fn a_full_order_at_an_inexact_factor_commits_exactly_the_headroom() {
     assert_eq!(series(&mut m, "acc.a.committed"), vec![0.0, 100.0, 100.0, 0.0, 0.0]);
     assert_eq!(series(&mut m, "acc.a.closing_balance"), vec![100.0, 100.0, 0.0, 0.0, 0.0]);
     assert_eq!(series(&mut m, "acc.a.debits"), vec![0.0, 0.0, 100.0, 0.0, 0.0]);
+}
+
+#[test]
+fn canonical_save_round_trips_the_factor_exactly() {
+    let ini = r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-02
+
+[acc.g]
+accounts = name, size, initial, pair, debit_factor,
+           a,    1000, 100,     c,    1.1764705882352942,
+           b,    1000, 50,      d,    1.00000000001,
+
+[acc.h]
+accounts = name, size, initial, debit_factor,
+           c,    500,  0,       1,
+           d,    500,  0,       1,
+
+[node.src]
+type = inflow
+loc = 0, 0
+inflow = 500
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 10
+"#;
+    let mut model = IniModelIO::read_model_string(ini).expect("model should load");
+    model.configuration.save_method = SaveMethod::Canonical;
+    let saved = IniModelIO::model_to_string(&model);
+    assert!(saved.contains("accounts = name, size, initial, pair, debit_factor,"), "pair before debit_factor:
+{}", saved);
+    assert_eq!(saved.matches("debit_factor").count(), 1, "an all-1 group drops the column:
+{}", saved);
+    let reloaded = IniModelIO::read_model_string(&saved)
+        .unwrap_or_else(|e| panic!("saved model should reload: {}
+{}", e, saved));
+    let am = &reloaded.account_manager;
+    let account = |name: &str| am.get_account(am.get_account_idx(name).unwrap()).unwrap();
+    assert_eq!(account("a").debit_factor, 1.1764705882352942);
+    assert_eq!(account("b").debit_factor, 1.00000000001, "not rounded to 1");
+    assert_eq!(account("c").debit_factor, 1.0);
+    assert_eq!(account("a").pair, am.get_account_idx("c"), "pairing survives");
 }
