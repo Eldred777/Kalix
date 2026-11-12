@@ -332,13 +332,10 @@ loc = 0, 10
     let mut model = IniModelIO::read_model_string(ini).expect("model should load");
     model.configuration.save_method = SaveMethod::Canonical;
     let saved = IniModelIO::model_to_string(&model);
-    assert!(saved.contains("accounts = name, size, initial, pair, debit_factor,"), "pair before debit_factor:
-{}", saved);
-    assert_eq!(saved.matches("debit_factor").count(), 1, "an all-1 group drops the column:
-{}", saved);
+    assert!(saved.contains("accounts = name, size, initial, pair, debit_factor,"), "pair before debit_factor:\n{}", saved);
+    assert_eq!(saved.matches("debit_factor").count(), 1, "an all-1 group drops the column:\n{}", saved);
     let reloaded = IniModelIO::read_model_string(&saved)
-        .unwrap_or_else(|e| panic!("saved model should reload: {}
-{}", e, saved));
+        .unwrap_or_else(|e| panic!("saved model should reload: {}\n{}", e, saved));
     let am = &reloaded.account_manager;
     let account = |name: &str| am.get_account(am.get_account_idx(name).unwrap()).unwrap();
     assert_eq!(account("a").debit_factor(), 1.1764705882352942);
