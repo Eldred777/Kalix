@@ -8,10 +8,10 @@
 //    regular accounts, floored at zero per account, plus the order_accounts.
 // 2. COMMIT ON ACCEPT: the accepted order is added to the accounts' committed
 //    tally at order time, cascading in list order.
-// 3. RELEASE ON DUE, DEBIT ON DIVERSION: on the step an order falls due the
-//    whole order leaves the tally, delivered or not. Only the water actually
-//    diverted is debited, so a short delivery leaves the balance free to be
-//    ordered again from that step.
+// 3. RELEASE AFTER DUE, DEBIT ON DIVERSION: at the start of the step after an
+//    order falls due the whole order leaves the tally, delivered or not. Only
+//    the water actually diverted is debited, so a short delivery leaves the
+//    balance free to be ordered again from that step.
 // 4. The tally is a forecast, never a debit: balances, debits, use and
 //    allocation never see it. It is published as acc.<name>.committed as each
 //    day's ordering begins, so opening_balance - committed is the headroom

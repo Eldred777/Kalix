@@ -62,8 +62,8 @@ pub struct AccountManager {
 
 /// Fields an `acc.<name>.<field>` reference may use. Closed set: anything
 /// else is a load error rather than a silently unwritten series. `use` is
-/// water taken since the last reset_allocation — the use term of the
-/// allocation (balance + use), fed only by node takes. `committed` is the
+/// what node takes have charged since the last reset_allocation (water taken
+/// times the debit factor) — the use term of the allocation (balance + use). `committed` is the
 /// orders accepted and not yet due (see Account::committed). `size` and
 /// `initial` are static (registered into `static_properties`, not published
 /// as per-step series like the rest); everything else is a genuine per-step
@@ -457,8 +457,8 @@ impl AccountManager {
     /// on to today. The total is re-summed from the ring whenever a slot is
     /// released, so it is the ring's sum and not a running tally that could
     /// drift from it. Then `committed` is published - the orders en route as
-    /// today's ordering begins, so that `opening_balance - committed` is the
-    /// headroom today's orders are capped by. Written before ordering, like
+    /// today's ordering begins, so that `opening_balance - committed`, over the
+    /// debit factor, is the water today's orders are capped by. Written before ordering, like
     /// `opening_balance`, so it reads cleanly mid-step.
     pub fn start_of_ordering(&mut self, data_cache: &mut DataCache) {
         if !self.has_accounts { return; }

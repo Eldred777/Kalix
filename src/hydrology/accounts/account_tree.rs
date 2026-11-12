@@ -130,24 +130,25 @@ impl AccountTree {
         self.terms.is_empty()
     }
 
-    /// Sum of the balances of the accounts the tree can draw on, each floored at zero and
-    /// combined by the tree: `|` sums, `&` takes the minimum.
+    /// The water the tree lets a take draw: each account's debitable water (its balance,
+    /// floored at zero, over its debit factor) combined by the tree: `|` sums, `&` takes the
+    /// minimum.
     #[inline(always)]
-    pub fn balance(&self, account_manager: &AccountManager) -> f64 {
+    pub fn debitable(&self, account_manager: &AccountManager) -> f64 {
         let (op, inner, _) = first_subtree(&self.terms);
-        fold(op, inner, &|idx| balance_of(account_manager, idx))
+        fold(op, inner, &|idx| debitable_of(account_manager, idx))
     }
 
-    /// As `balance`, over what each account can still cover: its balance less the orders
-    /// already committed against it, floored at zero account by account.
+    /// As `debitable`, over what each account can still cover: its balance less the orders
+    /// already committed against it, floored at zero account by account, over its factor.
     #[inline(always)]
-    pub fn uncommitted(&self, account_manager: &AccountManager) -> f64 {
+    pub fn uncommitted_debitable(&self, account_manager: &AccountManager) -> f64 {
         let (op, inner, _) = first_subtree(&self.terms);
-        fold(op, inner, &|idx| uncommitted_of(account_manager, idx))
+        fold(op, inner, &|idx| uncommitted_debitable_of(account_manager, idx))
     }
 
     /// Debit a take: left to right through `|`, filling each account before the next, and in
-    /// full from every side of `&`. The take must not exceed `balance()`, and is then absorbed
+    /// full from every side of `&`. The take must not exceed `debitable()`, and is then absorbed
     /// exactly: the root `&` hands every side the whole take, and a nested `&` takes the least
     /// of what it is handed and what its sides can cover.
     #[inline(always)]
@@ -157,20 +158,20 @@ impl AccountTree {
         }
         let (op, inner, _) = first_subtree(&self.terms);
         let leaf = &mut |account_manager: &mut AccountManager, idx: usize, remaining: f64| {
-            let take = remaining.min(balance_of(account_manager, idx));
+            let take = remaining.min(debitable_of(account_manager, idx));
             if take > 0.0 {
                 account_manager.debit_account(idx, take);
             }
             take
         };
         match op {
-            Term::All(_) => each_side_body!(inner, amount, account_manager, &balance_of, leaf, walk),
-            _ => { walk(op, inner, amount, account_manager, &balance_of, leaf); }
+            Term::All(_) => each_side_body!(inner, amount, account_manager, &debitable_of, leaf, walk),
+            _ => { walk(op, inner, amount, account_manager, &debitable_of, leaf); }
         }
     }
 
     /// Commit an accepted order, as `debit` against the uncommitted balances. The order may
-    /// exceed `uncommitted()` where order_accounts authorise the rest; what a side of the
+    /// exceed `uncommitted_debitable()` where order_accounts authorise the rest; what a side of the
     /// root `&`, or the whole, cannot cover goes on its first account, which is where the
     /// delivery will be debited first. That is the plain list's rule, applied per side.
     #[inline(always)]
@@ -180,7 +181,7 @@ impl AccountTree {
         }
         let (op, inner, _) = first_subtree(&self.terms);
         let leaf = &mut |account_manager: &mut AccountManager, idx: usize, remaining: f64| {
-            let commit = remaining.min(uncommitted_of(account_manager, idx));
+            let commit = remaining.min(uncommitted_debitable_of(account_manager, idx));
             if commit > 0.0 {
                 account_manager.commit_account(idx, commit, due_in);
             }
@@ -198,7 +199,7 @@ impl AccountTree {
                         _ => {
                             let (side_inner, after) = after.split_at(subtree_len(side));
                             rest = after;
-                            let taken = walk(side, side_inner, amount, account_manager, &uncommitted_of, leaf);
+                            let taken = walk(side, side_inner, amount, account_manager, &uncommitted_debitable_of, leaf);
                             if taken < amount {
                                 account_manager.commit_account(first_account(side_inner), amount - taken, due_in);
                             }
@@ -207,7 +208,7 @@ impl AccountTree {
                 }
             }
             _ => {
-                let taken = walk(op, inner, amount, account_manager, &uncommitted_of, leaf);
+                let taken = walk(op, inner, amount, account_manager, &uncommitted_debitable_of, leaf);
                 if taken < amount {
                     account_manager.commit_account(first_account(inner), amount - taken, due_in);
                 }
@@ -217,12 +218,12 @@ impl AccountTree {
 }
 
 #[inline(always)]
-fn balance_of(account_manager: &AccountManager, idx: usize) -> f64 {
+fn debitable_of(account_manager: &AccountManager, idx: usize) -> f64 {
     account_manager.get_account_debitable(idx)
 }
 
 #[inline(always)]
-fn uncommitted_of(account_manager: &AccountManager, idx: usize) -> f64 {
+fn uncommitted_debitable_of(account_manager: &AccountManager, idx: usize) -> f64 {
     account_manager.get_account_uncommitted_debitable(idx)
 }
 

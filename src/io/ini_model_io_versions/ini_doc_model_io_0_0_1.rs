@@ -32,14 +32,6 @@ const DS_4_OUTLET: u8 = 3; //ds_4 is outlet 3
 
 
 
-/// Converts INI-doc to Model struct.
-/// Returns Model on success, error message on failure.
-///
-/// # Arguments
-/// * `ini_doc` - The parsed INI document
-/// * `working_directory` - Optional working directory for resolving relative paths.
-///   If None, uses the current working directory.
-///
 /// The (node type, property) pairs whose declared value is registered into
 /// `DataCache::static_properties` at load, making them readable from any
 /// expression as `node.<name>.<property>`. Single source of truth: the load
@@ -69,6 +61,13 @@ pub(crate) const NODE_STATIC_F64_PROPERTIES: &[(&str, &str)] = &[
     ("field", "efficiency"),
 ];
 
+/// Converts INI-doc to Model struct.
+/// Returns Model on success, error message on failure.
+///
+/// # Arguments
+/// * `ini_doc` - The parsed INI document
+/// * `working_directory` - Optional working directory for resolving relative paths.
+///   If None, uses the current working directory.
 pub fn ini_doc_to_model_0_0_1(ini_doc: IniDocument, working_directory: Option<PathBuf>) -> Result<Model, KalixIoError> {
 
     // Create a new model
@@ -2274,8 +2273,8 @@ fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData
                     // Finite, normal and positive, so 1 / f is finite and non-zero: zero or a
                     // subnormal makes takes free and unlimited, infinity puts inf in `committed`
                     if !debit_factor.is_normal() || debit_factor < 0.0 {
-                        return Err(format!("Account '{}' has debit_factor {}: must be a finite number greater than 0",
-                            table_name, debit_factor));
+                        return Err(format!("Account '{}' has debit_factor {}: must be a finite number greater than 0 and not below about 2.2e-308",
+                            table_name, cell));
                     }
                 }
                 _ => unreachable!("header is drawn from ACCOUNT_TABLE_COLUMNS"),

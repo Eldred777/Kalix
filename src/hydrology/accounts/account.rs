@@ -3,7 +3,8 @@ use crate::numerical::fifo_buffer::FifoBuffer;
 /// A single account: pure state — name, cap, balance. Accounts carry no
 /// behaviour and no calendar; everything that changes a balance is a [ras.*]
 /// action or a node take (kalix-allocation-components.md §3.1).
-#[derive(Default, Clone)]
+// No Default: an account is built only by `new`, which sets the factor and its reciprocal together
+#[derive(Clone)]
 pub struct Account {
     // Properties
     pub name: String,
@@ -37,12 +38,13 @@ pub struct Account {
     /// Debits from node takes so far this step. Reset at the top of every
     /// step; only `debit_account` adds to it, so policy changes made by
     /// [ras.*] actions (write-offs, resets, credits) are excluded by
-    /// construction — this is "water used", not "balance moved".
+    /// construction — this is what takes charged (water used times the debit
+    /// factor), not "balance moved".
     pub debits_today: f64,
 
     /// Debits from node takes since the last allocation reset. Together with
-    /// the balance this *is* the account's allocation to date: water used does
-    /// not reduce an allocation, it moves between the two terms. Reset only by
+    /// the balance this *is* the account's allocation to date: a take does not
+    /// reduce an allocation, its charge moves between the two terms. Reset only by
     /// the `reset_allocation` action (kalix-allocation-components.md §3.4).
     pub debits_since_reset: f64,
 
@@ -79,6 +81,8 @@ impl Account {
 
     // Constructor
     pub fn new(name: String, account_type: String, size: f64, initial_balance: f64, debit_factor: f64) -> Self {
+        // The reader enforces this; the take paths rely on 1 / f being finite and non-zero
+        debug_assert!(debit_factor.is_normal() && debit_factor > 0.0, "debit_factor {} must be finite, normal and > 0", debit_factor);
         Account {
             name,
             account_type,

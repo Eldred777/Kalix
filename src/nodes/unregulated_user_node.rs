@@ -325,7 +325,7 @@ impl UnregulatedUserNode {
         // the sum across the ordered account list, or what the combination
         // makes available (`|` sums, `&` takes the least; account_tree.rs)
         if COMBINED {
-            available = available.min(self.account_tree.balance(_account_manager));
+            available = available.min(self.account_tree.debitable(_account_manager));
         } else if !self.account_idxs.is_empty() {
             let total_balance: f64 = self.account_idxs.iter()
                 .map(|&idx| _account_manager.get_account_debitable(idx))

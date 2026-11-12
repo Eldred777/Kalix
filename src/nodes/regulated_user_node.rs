@@ -369,7 +369,7 @@ impl RegulatedUserNode {
         // every side (account_tree.rs).
         if COMBINED || !self.account_idxs.is_empty() || !self.order_account_idxs.is_empty() {
             let regular_available = if COMBINED {
-                self.account_tree.uncommitted(_account_manager)
+                self.account_tree.uncommitted_debitable(_account_manager)
             } else {
                 // Each balance less its committed orders, floored at zero account by account
                 self.account_idxs.iter()
@@ -509,7 +509,7 @@ impl RegulatedUserNode {
         // supply outlets' share included: it is the user's water.
         if COMBINED || !self.account_idxs.is_empty() {
             let balance = if COMBINED {
-                self.account_tree.balance(_account_manager)
+                self.account_tree.debitable(_account_manager)
             } else {
                 self.account_idxs.iter()
                     .map(|&idx| _account_manager.get_account_debitable(idx))
