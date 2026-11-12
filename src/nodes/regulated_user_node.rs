@@ -376,10 +376,10 @@ impl RegulatedUserNode {
                     .map(|&idx| _account_manager.get_account_uncommitted_debitable(idx))
                     .sum()
             };
-            let order_balance: f64 = self.order_account_idxs.iter()
+            let order_debitable: f64 = self.order_account_idxs.iter()
                 .map(|&idx| _account_manager.get_account_debitable(idx))
                 .sum();
-            let mut remaining = regular_available + order_balance;
+            let mut remaining = regular_available + order_debitable;
             let mut outlet_orders_accepted = 0.0;
             if SUPPLY_OUTLETS {
                 for supply_outlet in &mut self.supply_outlets {
@@ -508,7 +508,7 @@ impl RegulatedUserNode {
         // opportunistic take gets what remains. The whole take is debited, the
         // supply outlets' share included: it is the user's water.
         if COMBINED || !self.account_idxs.is_empty() {
-            let balance = if COMBINED {
+            let debitable = if COMBINED {
                 self.account_tree.debitable(_account_manager)
             } else {
                 self.account_idxs.iter()
@@ -516,19 +516,19 @@ impl RegulatedUserNode {
                     .sum()
             };
             if SUPPLY_OUTLETS {
-                let mut remaining_balance = balance;
+                let mut remaining_debitable = debitable;
                 outlet_take = 0.0;
                 for supply_outlet in &mut self.supply_outlets {
-                    supply_outlet.flow = supply_outlet.flow.min(remaining_balance);
-                    remaining_balance -= supply_outlet.flow;
+                    supply_outlet.flow = supply_outlet.flow.min(remaining_debitable);
+                    remaining_debitable -= supply_outlet.flow;
                     outlet_take += supply_outlet.flow;
                 }
-                own_regulated = own_regulated.min(remaining_balance);
+                own_regulated = own_regulated.min(remaining_debitable);
                 diversion_regulated = outlet_take + own_regulated;
             } else {
-                diversion_regulated = diversion_regulated.min(balance);
+                diversion_regulated = diversion_regulated.min(debitable);
             }
-            diversion_opportunistic = diversion_opportunistic.min(balance - diversion_regulated);
+            diversion_opportunistic = diversion_opportunistic.min(debitable - diversion_regulated);
             let mut remaining = diversion_regulated + diversion_opportunistic;
             if COMBINED {
                 self.account_tree.debit(_account_manager, remaining);

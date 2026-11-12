@@ -327,10 +327,10 @@ impl UnregulatedUserNode {
         if COMBINED {
             available = available.min(self.account_tree.debitable(_account_manager));
         } else if !self.account_idxs.is_empty() {
-            let total_balance: f64 = self.account_idxs.iter()
+            let debitable: f64 = self.account_idxs.iter()
                 .map(|&idx| _account_manager.get_account_debitable(idx))
                 .sum();
-            available = available.min(total_balance);
+            available = available.min(debitable);
         }
 
         // The orders arriving on the supply outlets join the demand. They are served first, in
