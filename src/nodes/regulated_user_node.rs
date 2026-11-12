@@ -379,7 +379,8 @@ impl RegulatedUserNode {
             let order_debitable: f64 = self.order_account_idxs.iter()
                 .map(|&idx| _account_manager.get_account_debitable(idx))
                 .sum();
-            let mut remaining = regular_available + order_debitable;
+            let cap = regular_available + order_debitable;
+            let mut remaining = cap;
             let mut outlet_orders_accepted = 0.0;
             if SUPPLY_OUTLETS {
                 for supply_outlet in &mut self.supply_outlets {
@@ -390,18 +391,23 @@ impl RegulatedUserNode {
             }
             self.order_value = self.order_value.min(remaining);
             let order_placed = if SUPPLY_OUTLETS { outlet_orders_accepted + self.order_value } else { self.order_value };
+            // The cap bound if the user's own order took all the outlets left. The parts then
+            // sum to it only to a rounding step, so the walks below are handed the cap itself
+            // and drain every account.
+            let bound = self.order_value == remaining;
 
             // Commit the accepted order to the regular accounts, in list order
             // against what each can still cover. Any part beyond that (an order
             // the order_accounts authorised) goes on the first account, which is
             // where its delivery will be debited first.
+            let to_commit = if bound { cap } else { order_placed };
             if COMBINED {
-                self.account_tree.commit(_account_manager, order_placed, self.order_travel_time);
+                self.account_tree.commit(_account_manager, to_commit, self.order_travel_time);
             } else if !self.account_idxs.is_empty() {
-                _account_manager.commit_in_order(&self.account_idxs, order_placed, regular_available, self.order_travel_time);
+                _account_manager.commit_in_order(&self.account_idxs, to_commit, regular_available, self.order_travel_time);
             }
 
-            let excess = (order_placed - regular_available).max(0.0);
+            let excess = if bound { f64::INFINITY } else { (order_placed - regular_available).max(0.0) };
             _account_manager.take_in_order(&self.order_account_idxs, excess, order_debitable);
         }
 
@@ -460,14 +466,18 @@ impl RegulatedUserNode {
         // the order due unless the accounts capped the order (see demand_buffer).
         // The demands due on the supply outlets are served first, in outlet order, and the
         // user's own demand from what is left.
+        // Each part is capped by what the parts before it left, so none goes below zero.
+        let mut available_left = available;
         let mut outlet_take = 0.0;
         if SUPPLY_OUTLETS {
             for supply_outlet in &mut self.supply_outlets {
-                supply_outlet.flow = supply_outlet.demand.min(available - outlet_take);
+                supply_outlet.flow = supply_outlet.demand.min(available_left);
+                available_left -= supply_outlet.flow;
                 outlet_take += supply_outlet.flow;
             }
         }
-        let mut own_regulated = if SUPPLY_OUTLETS { self.demand.min(available - outlet_take) } else { self.demand.min(available) };
+        let mut own_regulated = self.demand.min(available_left);
+        available_left -= own_regulated;
         let mut diversion_regulated = if SUPPLY_OUTLETS { outlet_take + own_regulated } else { own_regulated };
 
         // Opportunistic take: demand for water above the arriving order (e.g.
@@ -479,7 +489,7 @@ impl RegulatedUserNode {
             DynamicInput::None { .. } => {}
             _ => {
                 opportunistic_demand_value = self.opportunistic_demand.get_value(data_cache).max(0.0);
-                diversion_opportunistic = opportunistic_demand_value.min(available - diversion_regulated);
+                diversion_opportunistic = opportunistic_demand_value.min(available_left);
             }
         };
 
@@ -497,8 +507,9 @@ impl RegulatedUserNode {
                     .map(|&idx| _account_manager.get_account_debitable(idx))
                     .sum()
             };
+            // Each part is capped by what the parts before it left, so none goes below zero
+            let mut remaining_debitable = debitable;
             if SUPPLY_OUTLETS {
-                let mut remaining_debitable = debitable;
                 outlet_take = 0.0;
                 for supply_outlet in &mut self.supply_outlets {
                     supply_outlet.flow = supply_outlet.flow.min(remaining_debitable);
@@ -506,12 +517,17 @@ impl RegulatedUserNode {
                     outlet_take += supply_outlet.flow;
                 }
                 own_regulated = own_regulated.min(remaining_debitable);
+                remaining_debitable -= own_regulated;
                 diversion_regulated = outlet_take + own_regulated;
             } else {
-                diversion_regulated = diversion_regulated.min(debitable);
+                diversion_regulated = diversion_regulated.min(remaining_debitable);
+                remaining_debitable -= diversion_regulated;
             }
-            diversion_opportunistic = diversion_opportunistic.min(debitable - diversion_regulated);
-            let take = diversion_regulated + diversion_opportunistic;
+            diversion_opportunistic = diversion_opportunistic.min(remaining_debitable);
+            remaining_debitable -= diversion_opportunistic;
+            // Nothing left means the take reached the cap. The parts sum to it only to a
+            // rounding step, so the walk is handed the cap itself and drains every account.
+            let take = if remaining_debitable <= 0.0 { debitable } else { diversion_regulated + diversion_opportunistic };
             if COMBINED {
                 self.account_tree.debit(_account_manager, take);
             } else {

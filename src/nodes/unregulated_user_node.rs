@@ -324,15 +324,18 @@ impl UnregulatedUserNode {
         // Restrict take based on accounts if applicable: available volume is
         // the sum across the ordered account list, or what the combination
         // makes available (`|` sums, `&` takes the least; account_tree.rs)
+        let has_accounts = COMBINED || !self.account_idxs.is_empty();
         let mut debitable = 0.0;
         if COMBINED {
-            available = available.min(self.account_tree.debitable(_account_manager));
-        } else if !self.account_idxs.is_empty() {
+            debitable = self.account_tree.debitable(_account_manager);
+            available = available.min(debitable);
+        } else if has_accounts {
             debitable = self.account_idxs.iter()
                 .map(|&idx| _account_manager.get_account_debitable(idx))
                 .sum();
             available = available.min(debitable);
         }
+        let accounts_bind = has_accounts && available == debitable;
 
         // The orders arriving on the supply outlets join the demand. They are served first, in
         // outlet order, within everything that limits the take above; the user's own demand
@@ -343,10 +346,11 @@ impl UnregulatedUserNode {
         if SUPPLY_OUTLETS {
             for supply_outlet in &mut self.supply_outlets {
                 let order = self.dsorders[supply_outlet.outlet as usize].max(0.0);
-                supply_outlet.flow = order.min(available - outlet_take).max(0.0);
+                // Each capped by what the outlets before it left
+                supply_outlet.flow = order.min(available).max(0.0);
+                available -= supply_outlet.flow;
                 outlet_take += supply_outlet.flow;
             }
-            available -= outlet_take;
         }
 
         // Carryover
@@ -379,6 +383,11 @@ impl UnregulatedUserNode {
             self.diversion = new_demand.min(available);
         }
 
+        // The take reached the accounts' cap if they were the binding limit and the user's own
+        // diversion took all the outlets left. The parts sum to the cap only to a rounding step,
+        // so the walk below is handed the cap itself and drains every account.
+        let take_is_cap = accounts_bind && self.diversion >= available;
+
         // The diversion is the whole metered take: the user's own, worked out above, and what
         // goes down the supply outlets. It is the user's water, so all of it is debited to the
         // accounts and counted against the annual cap.
@@ -389,10 +398,11 @@ impl UnregulatedUserNode {
         // Debit the diversion across accounts in order of use: drain the first
         // account before touching the second; through a combination, in full
         // from every side of `&`
+        let take = if take_is_cap { debitable } else { self.diversion };
         if COMBINED {
-            self.account_tree.debit(_account_manager, self.diversion);
+            self.account_tree.debit(_account_manager, take);
         } else {
-            _account_manager.take_in_order(&self.account_idxs, self.diversion, debitable);
+            _account_manager.take_in_order(&self.account_idxs, take, debitable);
         }
 
         // Update the annual diversion
