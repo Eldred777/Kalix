@@ -2497,7 +2497,7 @@ fn format_account_group_table(manager: &AccountManager, group: &AccountGroup) ->
     // Emitted only when some member departs from the 1.0 default, so models without it save unchanged
     let has_debit_factor = group.member_ids.iter()
         .filter_map(|&idx| manager.get_account(idx))
-        .any(|a| a.debit_factor != 1.0);
+        .any(|a| a.debit_factor() != 1.0);
     let mut out = String::from("name, size, initial, ");
     if has_pair { out.push_str("pair, "); }
     if has_debit_factor { out.push_str("debit_factor, "); }

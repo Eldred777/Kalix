@@ -28,10 +28,10 @@ pub struct Account {
     /// Debit factor (the `debit_factor` column, > 0, default 1.0): a take of
     /// x charges x * debit_factor to the account. Balance, committed and the
     /// debit tallies all hold the charged amount; the node's take stays water.
-    pub debit_factor: f64,
+    pub(super) debit_factor: f64,
     /// 1 / debit_factor, precomputed at load so the take-side reads multiply
     /// rather than divide. Exactly 1.0 when the factor is 1.0.
-    pub inv_debit_factor: f64,
+    pub(super) inv_debit_factor: f64,
 
     // State
     pub balance: f64,
@@ -101,6 +101,11 @@ impl Account {
             commit_ring: Vec::new(),
             commit_cursor: 0,
         }
+    }
+
+    /// What a take of one unit of water charges this account.
+    pub fn debit_factor(&self) -> f64 {
+        self.debit_factor
     }
 
     // Initialize account using saved initial balance

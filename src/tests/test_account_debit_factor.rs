@@ -271,11 +271,11 @@ fn factor_must_be_finite_normal_and_positive() {
 fn reciprocal_is_set_at_load_and_survives_a_rerun() {
     let mut m = load(&unregulated_model("           a, 1000, 100, 4,", 10.0, "accounts = a", ""));
     let idx = m.account_manager.get_account_idx("a").unwrap();
-    assert_eq!(m.account_manager.get_account(idx).unwrap().inv_debit_factor, 0.25);
+    assert_eq!(m.account_manager.get_account_debitable(idx), 25.0, "100 over 4");
     m.run().unwrap();
     let first = series(&mut m, "node.user.diversion");
+    assert_eq!(first, vec![10.0, 10.0, 5.0], "10 charges 40 a day, so the third day has 20 / 4");
     m.run().unwrap();
-    assert_eq!(m.account_manager.get_account(idx).unwrap().inv_debit_factor, 0.25);
     assert_eq!(series(&mut m, "node.user.diversion"), first);
 }
 
