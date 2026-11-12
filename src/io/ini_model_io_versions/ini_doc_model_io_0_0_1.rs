@@ -2515,7 +2515,7 @@ fn format_account_group_table(manager: &AccountManager, group: &AccountGroup) ->
             }
             if has_debit_factor {
                 // to_string round-trips exactly, as for order_factor; format_f64 keeps 10 places
-                out.push_str(&format!("{}, ", account.debit_factor));
+                out.push_str(&format!("{}, ", account.debit_factor()));
             }
         }
     }

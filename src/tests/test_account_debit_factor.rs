@@ -341,9 +341,9 @@ loc = 0, 10
 {}", e, saved));
     let am = &reloaded.account_manager;
     let account = |name: &str| am.get_account(am.get_account_idx(name).unwrap()).unwrap();
-    assert_eq!(account("a").debit_factor, 1.1764705882352942);
-    assert_eq!(account("b").debit_factor, 1.00000000001, "not rounded to 1");
-    assert_eq!(account("c").debit_factor, 1.0);
+    assert_eq!(account("a").debit_factor(), 1.1764705882352942);
+    assert_eq!(account("b").debit_factor(), 1.00000000001, "not rounded to 1");
+    assert_eq!(account("c").debit_factor(), 1.0);
     assert_eq!(account("a").pair, am.get_account_idx("c"), "pairing survives");
 }
 
