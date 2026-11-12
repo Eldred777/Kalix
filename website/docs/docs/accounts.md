@@ -263,7 +263,7 @@ same step needs the previous-step offset, e.g. `acc.smith.closing_balance[-1,
 
 - Account and group names are bare lowercase identifiers and share one flat
   namespace — every name, account or group, must be unique.
-- A user drawing its balance down does **not** reduce its `allocation`; the
-  water moves from the balance into the use tally.
+- A user drawing its balance down does **not** reduce its `allocation`; what
+  the take is charged moves from the balance into the use tally.
 - Accounts carry no behaviour. To reset, refill, limit, or announce, use a
   [`[ras.*]`](ras.md) section.

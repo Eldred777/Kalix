@@ -144,7 +144,8 @@ summed over each group (`acc.<group>.<field>`):
 | `closing_balance` | end of step, with every other recorder | no — mid-step reads hit the standard unwritten-value error; use `[-1, 0]` for yesterday |
 | `debits` | end of step | as above |
 
-`debits` is *water used*: only node takes feed it, and it resets each step, so
+`debits` is what node takes charged (the water taken times the account's
+`debit_factor`): only node takes feed it, and it resets each step, so
 `[ras.*]` credits, resets and write-offs are excluded by construction.
 
 `size` and `initial` are different — they're declared, not computed, and
@@ -312,9 +313,9 @@ if target_i > balance_i + use_i:  balance_i += target_i − (balance_i + use_i)
 
 Three consequences worth stating, because they are what make this simple:
 
-- **A user drawing their balance down does not reduce their allocation** — the
-  water moves from the balance term into the use term, leaving the sum
-  unchanged. Re-announcing the same percentage is a no-op however much has
+- **A user drawing their balance down does not reduce their allocation** — what
+  the take is charged moves from the balance term into the use term, leaving
+  the sum unchanged. Re-announcing the same percentage is a no-op however much has
   been taken, which is exactly the real-world rule.
 - **Monotonicity is intrinsic, not calendar-based.** The announcement only
   ever raises (announcements only rise — Barma pp. 9–10), so a level-semantic
