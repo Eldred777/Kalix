@@ -373,7 +373,8 @@ impl AccountManager {
     #[inline]
     pub fn get_account_debitable(&self, account_id: usize) -> f64 {
         let account = &self.accounts[account_id];
-        account.balance.max(0.0) * account.inv_debit_factor
+        // Multiply before the max: the result is never NaN, which keeps callers' min() one instruction
+        (account.balance * account.inv_debit_factor).max(0.0)
     }
 
     /// Debit an account for water taken by a node: `amount` is water, and the
@@ -394,7 +395,7 @@ impl AccountManager {
     #[inline]
     pub fn get_account_uncommitted_debitable(&self, account_id: usize) -> f64 {
         let account = &self.accounts[account_id];
-        (account.balance - account.committed).max(0.0) * account.inv_debit_factor
+        ((account.balance - account.committed) * account.inv_debit_factor).max(0.0)
     }
 
     /// A regulated user has accepted an order against this account, due in
