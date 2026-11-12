@@ -641,7 +641,7 @@ acc.g1.size
     assert_eq!(balance(&model, "a1"), 35.0, "bare read in a RAS action at the top of the step");
 }
 
-/// acc.<x>.use is water taken since the last reset_allocation: fed only by
+/// acc.<x>.use is what takes charged since the last reset_allocation: fed only by
 /// node takes (policy debits are excluded by construction), reset by the
 /// reset_allocation action, and aggregated over groups.
 #[test]
