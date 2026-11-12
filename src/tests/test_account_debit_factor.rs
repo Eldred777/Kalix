@@ -390,17 +390,9 @@ node.user.diversion
 #[test]
 fn combination_order_is_capped_committed_and_charged_per_side() {
     // (a | b) can cover 50 + 30 = 80 of water, cap 2000: the order is 80
-    let rows = "           a,   1000, 100,  2,
-           b,   1000, 30,   1,
-           cap, 1000, 1000, 0.5,";
-    let mut m = run(&regulated_model(rows, 2, "order = 100
-accounts = (a | b) & cap",
-        "acc.a.committed
-acc.b.committed
-acc.cap.committed
-acc.a.debits
-acc.b.debits
-acc.cap.debits"));
+    let rows = "           a,   1000, 100,  2,\n           b,   1000, 30,   1,\n           cap, 1000, 1000, 0.5,";
+    let mut m = run(&regulated_model(rows, 2, "order = 100\naccounts = (a | b) & cap",
+        "acc.a.committed\nacc.b.committed\nacc.cap.committed\nacc.a.debits\nacc.b.debits\nacc.cap.debits"));
     assert_eq!(series(&mut m, "node.user.order"), vec![80.0, 0.0, 0.0, 0.0, 0.0]);
     assert_eq!(series(&mut m, "acc.a.committed"), vec![0.0, 100.0, 100.0, 0.0, 0.0], "a's 50 of water committed as 100");
     assert_eq!(series(&mut m, "acc.b.committed"), vec![0.0, 30.0, 30.0, 0.0, 0.0]);
@@ -417,17 +409,9 @@ fn combination_overflow_and_order_accounts_are_charged_at_their_factors() {
     // (a | b) covers 80 of water and oa 100 more, so an order of 150 is accepted. The 70 the
     // left side cannot cover goes on its first account, a, at a's factor; oa is debited the
     // 70 excess at its own factor.
-    let rows = "           a,   1000, 100,  2,
-           b,   1000, 30,   1,
-           cap, 1000, 1000, 0.5,
-           oa,  1000, 400,  4,";
-    let mut m = run(&regulated_model(rows, 2, "order = 150
-accounts = (a | b) & cap
-order_accounts = oa",
-        "acc.a.committed
-acc.b.committed
-acc.cap.committed
-acc.oa.debits"));
+    let rows = "           a,   1000, 100,  2,\n           b,   1000, 30,   1,\n           cap, 1000, 1000, 0.5,\n           oa,  1000, 400,  4,";
+    let mut m = run(&regulated_model(rows, 2, "order = 150\naccounts = (a | b) & cap\norder_accounts = oa",
+        "acc.a.committed\nacc.b.committed\nacc.cap.committed\nacc.oa.debits"));
     assert_eq!(series(&mut m, "node.user.order")[0], 150.0);
     assert_eq!(series(&mut m, "acc.a.committed")[1], 240.0, "50 of water at the limit (100) plus the 70 overflow at 2");
     assert_eq!(series(&mut m, "acc.b.committed")[1], 30.0);
@@ -438,11 +422,8 @@ acc.oa.debits"));
 #[test]
 fn order_accounts_extend_the_order_cap_in_water() {
     // a covers 10 of water and oa 100 / 2 = 50, so an order of 200 is cut to 60
-    let rows = "           a,  1000, 10,  1,
-           oa, 1000, 100, 2,";
-    let mut m = run(&regulated_model(rows, 0, "order = 200
-accounts = a
-order_accounts = oa", "acc.oa.debits"));
+    let rows = "           a,  1000, 10,  1,\n           oa, 1000, 100, 2,";
+    let mut m = run(&regulated_model(rows, 0, "order = 200\naccounts = a\norder_accounts = oa", "acc.oa.debits"));
     assert_eq!(series(&mut m, "node.user.order")[0], 60.0);
     assert_eq!(series(&mut m, "acc.oa.debits")[0], 100.0, "oa's whole balance, exactly");
     assert_eq!(balance(&m, "oa"), 0.0);
