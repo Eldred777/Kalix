@@ -36,7 +36,7 @@ pub struct Account {
     // State
     pub balance: f64,
     /// Debits from node takes so far this step. Reset at the top of every
-    /// step; only `debit_account` adds to it, so policy changes made by
+    /// step; only `charge` (a node's take) adds to it, so policy changes made by
     /// [ras.*] actions (write-offs, resets, credits) are excluded by
     /// construction — this is what takes charged (water used times the debit
     /// factor), not "balance moved".
@@ -162,5 +162,28 @@ impl Account {
     // Sets the account balance to the given fraction of the account size
     pub fn set_balance_fraction(&mut self, balance_as_proportion_of_account_size: f64) {
         self.set_balance_fast(balance_as_proportion_of_account_size * self.size);
+    }
+
+    /// Charge a node's take to the account: the balance falls by `charged`
+    /// and the debit tallies rise by it.
+    #[inline]
+    pub(super) fn charge(&mut self, charged: f64) {
+        self.debit_account_fast(charged);
+        self.debits_today += charged;
+        self.debits_since_reset += charged;
+        self.debits_this_period += charged;
+    }
+
+    /// Add `charged` to the orders committed against the account, due in
+    /// `due_in` steps. The ring must have been sized for this user by
+    /// `set_commit_horizon`, so `due_in` is within it, and `start_of_ordering`
+    /// must have moved the cursor on to today.
+    #[inline]
+    pub(super) fn add_commitment(&mut self, charged: f64, due_in: usize) {
+        debug_assert!(due_in < self.commit_ring.len(), "commit ring of '{}' not sized for a travel time of {}", self.name, due_in);
+        let mut slot = self.commit_cursor + due_in;
+        if slot >= self.commit_ring.len() { slot -= self.commit_ring.len(); }
+        self.commit_ring[slot] += charged;
+        self.committed += charged;
     }
 }

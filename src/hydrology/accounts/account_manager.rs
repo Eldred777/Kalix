@@ -377,24 +377,43 @@ impl AccountManager {
         (account.balance * account.inv_debit_factor).max(0.0)
     }
 
-    /// Debit an account for water taken by a node: `amount` is water, and the
-    /// account is charged amount * debit_factor. This is the only path that
-    /// feeds the `debits` series, so policy changes stay out of it.
-    pub fn debit_account(&mut self, account_id: usize, amount: f64) {
+    /// Take up to `want` of water from an account for a node, and return what
+    /// it took. A take that reaches the account's limit drains it: it is
+    /// charged exactly the balance, however (balance / f) * f would round.
+    /// Below the limit the take is charged want * debit_factor. This is the
+    /// only path that feeds the `debits` series, so policy changes stay out
+    /// of it.
+    #[inline]
+    pub fn take(&mut self, account_id: usize, want: f64) -> f64 {
+        let limit = self.get_account_debitable(account_id);
         let account = &mut self.accounts[account_id];
-        // A take at the limit charges exactly what was left. Callers pass
-        // min(remaining, get_account_debitable), so a binding limit arrives
-        // bit-equal to it; (balance / f) * f can miss the balance by a rounding
-        // step and leave dust or an overdraw. At f = 1 both arms agree.
-        let charged = if amount == (account.balance * account.inv_debit_factor).max(0.0) {
-            account.balance.max(0.0)
+        if want >= limit {
+            // A positive limit means a positive balance
+            if limit > 0.0 {
+                let charged = account.balance;
+                account.charge(charged);
+            }
+            limit
+        } else if want > 0.0 {
+            account.charge(want * account.debit_factor);
+            want
         } else {
-            amount * account.debit_factor
-        };
-        account.debit_account_fast(charged);
-        account.debits_today += charged;
-        account.debits_since_reset += charged;
-        account.debits_this_period += charged;
+            0.0
+        }
+    }
+
+    /// Take `amount` of water from `account_idxs` in order of use, filling each
+    /// account before the next. `cap` is the sum of their debitable water, in
+    /// that order: a take that reaches it drains every account, which walking
+    /// the cap back down by subtraction would leave a rounding step short of.
+    #[inline]
+    pub fn take_in_order(&mut self, account_idxs: &[usize], amount: f64, cap: f64) {
+        if amount <= 0.0 { return; }
+        let mut remaining = if amount >= cap { f64::INFINITY } else { amount };
+        for &account_idx in account_idxs {
+            if remaining <= 0.0 { break; }
+            remaining -= self.take(account_idx, remaining);
+        }
     }
 
     /// What a regulated user may still order against an account, in water: the
@@ -408,28 +427,53 @@ impl AccountManager {
     }
 
     /// A regulated user has accepted an order against this account, due in
-    /// `due_in` steps (its travel time; 0 is today). `amount` is water and is
-    /// committed as amount * debit_factor, what its diversion will be charged.
-    /// Forecast only: the balance
-    /// is untouched until the water is diverted. The ring must have been sized
-    /// for this user by `set_commit_horizon`, so `due_in` is within it, and
-    /// `start_of_ordering` must have moved the cursor on to today.
+    /// `due_in` steps (its travel time; 0 is today): commit up to `want` of it,
+    /// in water, against what the account can still cover, and return what it
+    /// took. An order that reaches the headroom commits exactly the headroom;
+    /// below it, want * debit_factor, what its diversion will be charged.
+    /// Forecast only: the balance is untouched until the water is diverted.
+    #[inline]
+    pub fn commit_up_to(&mut self, account_id: usize, want: f64, due_in: usize) -> f64 {
+        let limit = self.get_account_uncommitted_debitable(account_id);
+        let account = &mut self.accounts[account_id];
+        if want >= limit {
+            // A positive limit means a positive headroom
+            if limit > 0.0 {
+                let headroom = account.balance - account.committed;
+                account.add_commitment(headroom, due_in);
+            }
+            limit
+        } else if want > 0.0 {
+            account.add_commitment(want * account.debit_factor, due_in);
+            want
+        } else {
+            0.0
+        }
+    }
+
+    /// Commit `amount` of water beyond what the account can cover: an order
+    /// the order_accounts authorised. Charged amount * debit_factor.
     #[inline]
     pub fn commit_account(&mut self, account_id: usize, amount: f64, due_in: usize) {
         let account = &mut self.accounts[account_id];
-        debug_assert!(due_in < account.commit_ring.len(), "commit ring of '{}' not sized for a travel time of {}", account.name, due_in);
-        let mut slot = account.commit_cursor + due_in;
-        if slot >= account.commit_ring.len() { slot -= account.commit_ring.len(); }
-        // Committed in balance terms, like the debit it forecasts. An order at
-        // the limit commits exactly the headroom, as debit_account does.
-        let headroom = account.balance - account.committed;
-        let charged = if amount == (headroom * account.inv_debit_factor).max(0.0) {
-            headroom.max(0.0)
-        } else {
-            amount * account.debit_factor
-        };
-        account.commit_ring[slot] += charged;
-        account.committed += charged;
+        account.add_commitment(amount * account.debit_factor, due_in);
+    }
+
+    /// Commit `amount` of water to `account_idxs` in order of use, as
+    /// `take_in_order` takes it, against `cap`, the sum of what they can still
+    /// cover. What is beyond the cap (authorised by order_accounts) goes on the
+    /// first account, which is where its delivery will be debited first.
+    #[inline]
+    pub fn commit_in_order(&mut self, account_idxs: &[usize], amount: f64, cap: f64, due_in: usize) {
+        if amount <= 0.0 { return; }
+        let (mut remaining, overflow) = if amount >= cap { (f64::INFINITY, amount - cap) } else { (amount, 0.0) };
+        for &account_idx in account_idxs {
+            if remaining <= 0.0 { break; }
+            remaining -= self.commit_up_to(account_idx, remaining, due_in);
+        }
+        if overflow > 0.0 {
+            self.commit_account(account_idxs[0], overflow, due_in);
+        }
     }
 
     /// Empty every account's commit ring, ahead of re-sizing them.

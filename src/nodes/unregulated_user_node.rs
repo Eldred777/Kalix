@@ -324,10 +324,11 @@ impl UnregulatedUserNode {
         // Restrict take based on accounts if applicable: available volume is
         // the sum across the ordered account list, or what the combination
         // makes available (`|` sums, `&` takes the least; account_tree.rs)
+        let mut debitable = 0.0;
         if COMBINED {
             available = available.min(self.account_tree.debitable(_account_manager));
         } else if !self.account_idxs.is_empty() {
-            let debitable: f64 = self.account_idxs.iter()
+            debitable = self.account_idxs.iter()
                 .map(|&idx| _account_manager.get_account_debitable(idx))
                 .sum();
             available = available.min(debitable);
@@ -391,15 +392,7 @@ impl UnregulatedUserNode {
         if COMBINED {
             self.account_tree.debit(_account_manager, self.diversion);
         } else {
-            let mut remaining = self.diversion;
-            for &account_idx in &self.account_idxs {
-                if remaining <= 0.0 { break; }
-                let take = remaining.min(_account_manager.get_account_debitable(account_idx));
-                if take > 0.0 {
-                    _account_manager.debit_account(account_idx, take);
-                    remaining -= take;
-                }
-            }
+            _account_manager.take_in_order(&self.account_idxs, self.diversion, debitable);
         }
 
         // Update the annual diversion

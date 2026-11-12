@@ -158,11 +158,7 @@ impl AccountTree {
         }
         let (op, inner, _) = first_subtree(&self.terms);
         let leaf = &mut |account_manager: &mut AccountManager, idx: usize, remaining: f64| {
-            let take = remaining.min(account_manager.get_account_debitable(idx));
-            if take > 0.0 {
-                account_manager.debit_account(idx, take);
-            }
-            take
+            account_manager.take(idx, remaining)
         };
         match op {
             Term::All(_) => each_side_body!(inner, amount, account_manager, &AccountManager::get_account_debitable, leaf, walk),
@@ -181,11 +177,7 @@ impl AccountTree {
         }
         let (op, inner, _) = first_subtree(&self.terms);
         let leaf = &mut |account_manager: &mut AccountManager, idx: usize, remaining: f64| {
-            let commit = remaining.min(account_manager.get_account_uncommitted_debitable(idx));
-            if commit > 0.0 {
-                account_manager.commit_account(idx, commit, due_in);
-            }
-            commit
+            account_manager.commit_up_to(idx, remaining, due_in)
         };
         match op {
             Term::All(_) => {
@@ -194,7 +186,11 @@ impl AccountTree {
                     match side {
                         Term::Account(idx) => {
                             rest = after;
-                            account_manager.commit_account(idx as usize, amount, due_in);
+                            // Up to the headroom exactly, and anything beyond it as an overflow
+                            let taken = account_manager.commit_up_to(idx as usize, amount, due_in);
+                            if taken < amount {
+                                account_manager.commit_account(idx as usize, amount - taken, due_in);
+                            }
                         }
                         _ => {
                             let (side_inner, after) = after.split_at(subtree_len(side));

@@ -398,29 +398,11 @@ impl RegulatedUserNode {
             if COMBINED {
                 self.account_tree.commit(_account_manager, order_placed, self.order_travel_time);
             } else if !self.account_idxs.is_empty() {
-                let mut to_commit = order_placed;
-                for &account_idx in &self.account_idxs {
-                    if to_commit <= 0.0 { break; }
-                    let commit = to_commit.min(_account_manager.get_account_uncommitted_debitable(account_idx));
-                    if commit > 0.0 {
-                        _account_manager.commit_account(account_idx, commit, self.order_travel_time);
-                        to_commit -= commit;
-                    }
-                }
-                if to_commit > 0.0 {
-                    _account_manager.commit_account(self.account_idxs[0], to_commit, self.order_travel_time);
-                }
+                _account_manager.commit_in_order(&self.account_idxs, order_placed, regular_available, self.order_travel_time);
             }
 
-            let mut excess = (order_placed - regular_available).max(0.0);
-            for &account_idx in &self.order_account_idxs {
-                if excess <= 0.0 { break; }
-                let debit = excess.min(_account_manager.get_account_debitable(account_idx));
-                if debit > 0.0 {
-                    _account_manager.debit_account(account_idx, debit);
-                    excess -= debit;
-                }
-            }
+            let excess = (order_placed - regular_available).max(0.0);
+            _account_manager.take_in_order(&self.order_account_idxs, excess, order_debitable);
         }
 
         // The order placed travel_time steps ago falls due today. So does the demand of that
@@ -529,18 +511,11 @@ impl RegulatedUserNode {
                 diversion_regulated = diversion_regulated.min(debitable);
             }
             diversion_opportunistic = diversion_opportunistic.min(debitable - diversion_regulated);
-            let mut remaining = diversion_regulated + diversion_opportunistic;
+            let take = diversion_regulated + diversion_opportunistic;
             if COMBINED {
-                self.account_tree.debit(_account_manager, remaining);
+                self.account_tree.debit(_account_manager, take);
             } else {
-                for &account_idx in &self.account_idxs {
-                    if remaining <= 0.0 { break; }
-                    let take = remaining.min(_account_manager.get_account_debitable(account_idx));
-                    if take > 0.0 {
-                        _account_manager.debit_account(account_idx, take);
-                        remaining -= take;
-                    }
-                }
+                _account_manager.take_in_order(&self.account_idxs, take, debitable);
             }
         }
         self.diversion = diversion_regulated + diversion_opportunistic;
