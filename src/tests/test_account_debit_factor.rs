@@ -10,7 +10,7 @@
 //    never the amount charged.
 // 4. Each account in a combination is charged at its own factor; order_accounts
 //    are charged at theirs.
-// 5. LOAD: the factor must be greater than 0. 1 / f is precomputed at load and
+// 5. LOAD: the factor must be a finite, normal number greater than 0. 1 / f is precomputed at load and
 //    survives a rerun.
 use crate::io::ini_model_io::IniModelIO;
 
@@ -254,12 +254,12 @@ acc.oa.debits
 // ------------------------------------------------------------------------------------------
 
 #[test]
-fn factor_must_be_greater_than_zero() {
-    for bad in ["0", "-1", "NaN"] {
+fn factor_must_be_finite_normal_and_positive() {
+    for bad in ["0", "-1", "NaN", "inf", "1e400", "1e-320"] {
         let ini = unregulated_model(&format!("           a, 1000, 100, {},", bad), 10.0, "accounts = a", "");
         let err = IniModelIO::read_model_string(&ini).err()
             .unwrap_or_else(|| panic!("debit_factor {} should be a load error", bad)).to_string();
-        assert!(err.contains("must be greater than 0"), "{}: {}", bad, err);
+        assert!(err.contains("must be a finite number greater than 0"), "{}: {}", bad, err);
     }
 }
 

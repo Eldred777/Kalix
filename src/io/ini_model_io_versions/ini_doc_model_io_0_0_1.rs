@@ -2271,9 +2271,10 @@ fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData
                     debit_factor = cell.parse::<f64>()
                         .map_err(|_| format!("Invalid debit_factor '{}' for account '{}': must be a number",
                             cell, table_name))?;
-                    // Zero would make takes free and unlimited (balance / 0)
-                    if debit_factor.is_nan() || debit_factor <= 0.0 {
-                        return Err(format!("Account '{}' has debit_factor {}: must be greater than 0",
+                    // Finite, normal and positive, so 1 / f is finite and non-zero: zero or a
+                    // subnormal makes takes free and unlimited, infinity puts inf in `committed`
+                    if !debit_factor.is_normal() || debit_factor < 0.0 {
+                        return Err(format!("Account '{}' has debit_factor {}: must be a finite number greater than 0",
                             table_name, debit_factor));
                     }
                 }
