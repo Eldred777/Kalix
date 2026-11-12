@@ -366,26 +366,41 @@ impl AccountManager {
         self.accounts.get(account_id)
     }
 
-    /// Debit an account for water taken by a node. This is the only path that
-    /// feeds the `debits` series, so policy changes stay out of "water used".
-    pub fn debit_account(&mut self, account_id: usize, amount: f64) {
-        self.accounts[account_id].debit_account_fast(amount);
-        self.accounts[account_id].debits_today += amount;
-        self.accounts[account_id].debits_since_reset += amount;
-        self.accounts[account_id].debits_this_period += amount;
+    /// The water a take may draw from an account: its balance, floored at zero,
+    /// over its debit factor. In water, not balance: debiting all of it
+    /// charges the whole balance. Takes read this; [ras.*] reads the raw
+    /// balance through get_account_balance.
+    #[inline]
+    pub fn get_account_debitable(&self, account_id: usize) -> f64 {
+        let account = &self.accounts[account_id];
+        account.balance.max(0.0) * account.inv_debit_factor
     }
 
-    /// What a regulated user may still order against an account: the balance
-    /// less the orders already en route, floored at zero (a RAS cut can leave
-    /// the committed orders above the balance until they fall due).
+    /// Debit an account for water taken by a node: `amount` is water, and the
+    /// account is charged amount * debit_factor. This is the only path that
+    /// feeds the `debits` series, so policy changes stay out of "water used".
+    pub fn debit_account(&mut self, account_id: usize, amount: f64) {
+        let scaled_amount = amount * self.accounts[account_id].debit_factor;
+        self.accounts[account_id].debit_account_fast(scaled_amount);
+        self.accounts[account_id].debits_today += scaled_amount;
+        self.accounts[account_id].debits_since_reset += scaled_amount;
+        self.accounts[account_id].debits_this_period += scaled_amount;
+    }
+
+    /// What a regulated user may still order against an account, in water: the
+    /// balance less the orders already en route, floored at zero (a RAS cut can
+    /// leave the committed orders above the balance until they fall due), over
+    /// the debit factor.
     #[inline]
-    pub fn get_account_uncommitted_balance(&self, account_id: usize) -> f64 {
+    pub fn get_account_uncommitted_debitable(&self, account_id: usize) -> f64 {
         let account = &self.accounts[account_id];
-        (account.balance - account.committed).max(0.0)
+        (account.balance - account.committed).max(0.0) * account.inv_debit_factor
     }
 
     /// A regulated user has accepted an order against this account, due in
-    /// `due_in` steps (its travel time; 0 is today). Forecast only: the balance
+    /// `due_in` steps (its travel time; 0 is today). `amount` is water and is
+    /// committed as amount * debit_factor, what its diversion will be charged.
+    /// Forecast only: the balance
     /// is untouched until the water is diverted. The ring must have been sized
     /// for this user by `set_commit_horizon`, so `due_in` is within it, and
     /// `start_of_ordering` must have moved the cursor on to today.
@@ -395,8 +410,10 @@ impl AccountManager {
         debug_assert!(due_in < account.commit_ring.len(), "commit ring of '{}' not sized for a travel time of {}", account.name, due_in);
         let mut slot = account.commit_cursor + due_in;
         if slot >= account.commit_ring.len() { slot -= account.commit_ring.len(); }
-        account.commit_ring[slot] += amount;
-        account.committed += amount;
+        // Committed in balance terms, like the debit it forecasts
+        let charged = amount * account.debit_factor;
+        account.commit_ring[slot] += charged;
+        account.committed += charged;
     }
 
     /// Empty every account's commit ring, ahead of re-sizing them.

@@ -2271,8 +2271,9 @@ fn parse_account_table(flat: &str, model: &mut Model) -> Result<AccountTableData
                     debit_factor = cell.parse::<f64>()
                         .map_err(|_| format!("Invalid debit_factor '{}' for account '{}': must be a number",
                             cell, table_name))?;
-                    if debit_factor.is_nan() || debit_factor < 0.0 {
-                        return Err(format!("Account '{}' has negative debit_factor {}",
+                    // Zero would make takes free and unlimited (balance / 0)
+                    if debit_factor.is_nan() || debit_factor <= 0.0 {
+                        return Err(format!("Account '{}' has debit_factor {}: must be greater than 0",
                             table_name, debit_factor));
                     }
                 }

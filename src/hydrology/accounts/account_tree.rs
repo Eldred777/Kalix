@@ -218,12 +218,12 @@ impl AccountTree {
 
 #[inline(always)]
 fn balance_of(account_manager: &AccountManager, idx: usize) -> f64 {
-    account_manager.get_account_balance(idx).max(0.0)
+    account_manager.get_account_debitable(idx)
 }
 
 #[inline(always)]
 fn uncommitted_of(account_manager: &AccountManager, idx: usize) -> f64 {
-    account_manager.get_account_uncommitted_balance(idx)
+    account_manager.get_account_uncommitted_debitable(idx)
 }
 
 /// A subtree is its operator followed by the `len` terms beneath it, so the terms beneath an

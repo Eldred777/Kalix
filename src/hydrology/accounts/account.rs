@@ -24,10 +24,13 @@ pub struct Account {
     /// that wrote it and not both.
     pub pair_declared: bool,
 
-    /// Debit factor for the account. If present, this factor is used
-    /// to scale the amount debited from the account when a node takes water.
-    /// 1.0 by default.
+    /// Debit factor (the `debit_factor` column, > 0, default 1.0): a take of
+    /// x charges x * debit_factor to the account. Balance, committed and the
+    /// debit tallies all hold the charged amount; the node's take stays water.
     pub debit_factor: f64,
+    /// 1 / debit_factor, precomputed at load so the take-side reads multiply
+    /// rather than divide. Exactly 1.0 when the factor is 1.0.
+    pub inv_debit_factor: f64,
 
     // State
     pub balance: f64,
@@ -84,6 +87,7 @@ impl Account {
             pair: None,
             pair_declared: false,
             debit_factor,
+            inv_debit_factor: 1.0 / debit_factor,
             balance: initial_balance,
             debits_today: 0.0,
             debits_since_reset: 0.0,

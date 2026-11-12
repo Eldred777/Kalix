@@ -319,9 +319,9 @@ fn commit_overflow_goes_on_the_first_account_of_each_side_that_fell_short() {
     };
     assert_eq!(tree.uncommitted(manager), 15.0);
     tree.commit(manager, 40.0, 0);
-    assert_eq!(manager.get_account_uncommitted_balance(a), 0.0);
-    assert_eq!(manager.get_account_uncommitted_balance(b), 0.0);
-    assert_eq!(manager.get_account_uncommitted_balance(big), 60.0, "big committed the whole 40");
+    assert_eq!(manager.get_account_uncommitted_debitable(a), 0.0);
+    assert_eq!(manager.get_account_uncommitted_debitable(b), 0.0);
+    assert_eq!(manager.get_account_uncommitted_debitable(big), 60.0, "big committed the whole 40");
     let committed = |idx: usize| manager.get_account(idx).unwrap().committed;
     assert_eq!(committed(a), 35.0, "a's 10 plus the 25 the left side could not cover");
     assert_eq!(committed(b), 5.0);

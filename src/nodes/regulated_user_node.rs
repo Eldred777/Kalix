@@ -373,11 +373,11 @@ impl RegulatedUserNode {
             } else {
                 // Each balance less its committed orders, floored at zero account by account
                 self.account_idxs.iter()
-                    .map(|&idx| _account_manager.get_account_uncommitted_balance(idx))
+                    .map(|&idx| _account_manager.get_account_uncommitted_debitable(idx))
                     .sum()
             };
             let order_balance: f64 = self.order_account_idxs.iter()
-                .map(|&idx| _account_manager.get_account_balance(idx).max(0.0))
+                .map(|&idx| _account_manager.get_account_debitable(idx))
                 .sum();
             let mut remaining = regular_available + order_balance;
             let mut outlet_orders_accepted = 0.0;
@@ -401,7 +401,7 @@ impl RegulatedUserNode {
                 let mut to_commit = order_placed;
                 for &account_idx in &self.account_idxs {
                     if to_commit <= 0.0 { break; }
-                    let commit = to_commit.min(_account_manager.get_account_uncommitted_balance(account_idx));
+                    let commit = to_commit.min(_account_manager.get_account_uncommitted_debitable(account_idx));
                     if commit > 0.0 {
                         _account_manager.commit_account(account_idx, commit, self.order_travel_time);
                         to_commit -= commit;
@@ -415,7 +415,7 @@ impl RegulatedUserNode {
             let mut excess = (order_placed - regular_available).max(0.0);
             for &account_idx in &self.order_account_idxs {
                 if excess <= 0.0 { break; }
-                let debit = excess.min(_account_manager.get_account_balance(account_idx).max(0.0));
+                let debit = excess.min(_account_manager.get_account_debitable(account_idx));
                 if debit > 0.0 {
                     _account_manager.debit_account(account_idx, debit);
                     excess -= debit;
@@ -512,7 +512,7 @@ impl RegulatedUserNode {
                 self.account_tree.balance(_account_manager)
             } else {
                 self.account_idxs.iter()
-                    .map(|&idx| _account_manager.get_account_balance(idx).max(0.0))
+                    .map(|&idx| _account_manager.get_account_debitable(idx))
                     .sum()
             };
             if SUPPLY_OUTLETS {
@@ -535,7 +535,7 @@ impl RegulatedUserNode {
             } else {
                 for &account_idx in &self.account_idxs {
                     if remaining <= 0.0 { break; }
-                    let take = remaining.min(_account_manager.get_account_balance(account_idx).max(0.0));
+                    let take = remaining.min(_account_manager.get_account_debitable(account_idx));
                     if take > 0.0 {
                         _account_manager.debit_account(account_idx, take);
                         remaining -= take;

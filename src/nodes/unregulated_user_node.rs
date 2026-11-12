@@ -328,7 +328,7 @@ impl UnregulatedUserNode {
             available = available.min(self.account_tree.balance(_account_manager));
         } else if !self.account_idxs.is_empty() {
             let total_balance: f64 = self.account_idxs.iter()
-                .map(|&idx| _account_manager.get_account_balance(idx).max(0.0))
+                .map(|&idx| _account_manager.get_account_debitable(idx))
                 .sum();
             available = available.min(total_balance);
         }
@@ -394,7 +394,7 @@ impl UnregulatedUserNode {
             let mut remaining = self.diversion;
             for &account_idx in &self.account_idxs {
                 if remaining <= 0.0 { break; }
-                let take = remaining.min(_account_manager.get_account_balance(account_idx).max(0.0));
+                let take = remaining.min(_account_manager.get_account_debitable(account_idx));
                 if take > 0.0 {
                     _account_manager.debit_account(account_idx, take);
                     remaining -= take;
