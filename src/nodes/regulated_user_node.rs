@@ -164,26 +164,6 @@ impl RegulatedUserNode {
     pub fn register_order_accounts(&mut self, account_idxs: Vec<usize>) {
         self.order_account_idxs = account_idxs;
     }
-
-    fn total_account_balance(&self, account_manager: &AccountManager) -> f64 {
-        self.account_idxs.iter()
-            .map(|&idx| account_manager.get_account_balance(idx).max(0.0))
-            .sum()
-    }
-
-    /// What the regular accounts can still cover: each balance less the orders
-    /// already committed against it, floored at zero account by account.
-    fn total_account_uncommitted(&self, account_manager: &AccountManager) -> f64 {
-        self.account_idxs.iter()
-            .map(|&idx| account_manager.get_account_uncommitted_balance(idx))
-            .sum()
-    }
-
-    fn total_order_account_balance(&self, account_manager: &AccountManager) -> f64 {
-        self.order_account_idxs.iter()
-            .map(|&idx| account_manager.get_account_balance(idx).max(0.0))
-            .sum()
-    }
 }
 
 impl Node for RegulatedUserNode {
@@ -391,9 +371,14 @@ impl RegulatedUserNode {
             let regular_available = if COMBINED {
                 self.account_tree.uncommitted(_account_manager)
             } else {
-                self.total_account_uncommitted(_account_manager)
+                // Each balance less its committed orders, floored at zero account by account
+                self.account_idxs.iter()
+                    .map(|&idx| _account_manager.get_account_uncommitted_balance(idx))
+                    .sum()
             };
-            let order_balance = self.total_order_account_balance(_account_manager);
+            let order_balance: f64 = self.order_account_idxs.iter()
+                .map(|&idx| _account_manager.get_account_balance(idx).max(0.0))
+                .sum();
             let mut remaining = regular_available + order_balance;
             let mut outlet_orders_accepted = 0.0;
             if SUPPLY_OUTLETS {
@@ -526,7 +511,9 @@ impl RegulatedUserNode {
             let balance = if COMBINED {
                 self.account_tree.balance(_account_manager)
             } else {
-                self.total_account_balance(_account_manager)
+                self.account_idxs.iter()
+                    .map(|&idx| _account_manager.get_account_balance(idx).max(0.0))
+                    .sum()
             };
             if SUPPLY_OUTLETS {
                 let mut remaining_balance = balance;
