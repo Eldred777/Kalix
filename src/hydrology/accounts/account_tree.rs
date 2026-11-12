@@ -74,32 +74,67 @@ macro_rules! fold_body {
     }};
 }
 
-/// Top-down walk of the subtree `op` over `inner` with `amount`. `|` hands each child what the
-/// children before it left. `&` takes the least of `amount` and what its sides can cover, by
-/// `avail`, and hands that to every side; so under a `|` it reports what it absorbed and the
-/// `|` carries the rest on. Returns what the subtree absorbed. Laid out as `fold`: leaves in
-/// the parent's loop, two levels inlined by direct call, the body one macro.
+/// Top-down walk of the subtree `op` over `inner` with `amount`. `|` fills its children left
+/// to right: it keeps a running total of their capacities, by `avail`, summed in `fold`'s order,
+/// and fills a child in full while `amount` reaches the total, then hands the next child what is
+/// left and stops. At the subtree's capacity the total equals it bitwise, so every child fills
+/// in full; subtracting the children back off `amount` would hand the last one a rounding step
+/// short of its capacity. `&` takes the least of `amount` and what its sides can cover and hands
+/// that to every side; an `&` child of a `|` is handed its capacity, or the part left, directly.
+/// Returns what the subtree absorbed. Leaves are handled in the parent's loop and the top level
+/// is inlined; an operator child is walked by call (`walk_deeper`, `each_side_deeper`), as it
+/// is uncommon and inlining it bloated the phases. The body is one macro, shared by both.
 macro_rules! walk_body {
-    ($op:expr, $inner:expr, $amount:expr, $am:expr, $avail:expr, $leaf:expr, $next:ident) => {{
+    ($op:expr, $inner:expr, $amount:expr, $am:expr, $avail:expr, $leaf:expr) => {{
         match $op {
             Term::Any(_) => {
+                let amount = $amount;
                 let mut rest: &[Term] = $inner;
-                let mut remaining = $amount;
+                let mut filled = 0.0;
                 while let Some((&child, after)) = rest.split_first() {
-                    if remaining <= 0.0 {
-                        break;
+                    let before = filled;
+                    match child {
+                        Term::Account(idx) => {
+                            rest = after;
+                            let capacity = $avail(&*$am, idx as usize);
+                            filled += capacity;
+                            // In full, or the part left, which the leaf drains if it rounds up
+                            // to the capacity. One call site, so the leaf is inlined once.
+                            let full = amount >= filled;
+                            $leaf($am, idx as usize, if full { capacity } else { amount - before });
+                            if !full {
+                                break;
+                            }
+                        }
+                        _ => {
+                            let (inner, after) = after.split_at(subtree_len(child));
+                            rest = after;
+                            // An operator under a `|` is uncommon, (a | b) & cap the usual shape, so
+                            // it is folded and walked by call: inlined at every level it multiplied
+                            // the code of the combined phases several times over
+                            let capacity = fold_deeper(child, inner, &|idx| $avail(&*$am, idx));
+                            filled += capacity;
+                            let part = if amount >= filled { capacity } else { (amount - before).min(capacity) };
+                            if part > 0.0 {
+                                match child {
+                                    Term::All(_) => each_side_deeper(inner, part, $am, $avail, $leaf),
+                                    _ => { walk_deeper(child, inner, part, $am, $avail, $leaf); }
+                                }
+                            }
+                            if amount < filled {
+                                break;
+                            }
+                        }
                     }
-                    remaining -= match child {
-                        Term::Account(idx) => { rest = after; $leaf($am, idx as usize, remaining) }
-                        _ => { let (inner, after) = after.split_at(subtree_len(child)); rest = after; $next(child, inner, remaining, $am, $avail, $leaf) }
-                    };
                 }
-                $amount - remaining
+                amount.min(filled)
             }
             Term::All(_) => {
-                let capacity = fold($op, $inner, &|idx| $avail(&*$am, idx));
+                // Not reached from a canonical tree, whose `&` children are walked by the `|`
+                // arm above; kept for a tree built by from_combination as given, and by call
+                let capacity = fold_deeper($op, $inner, &|idx| $avail(&*$am, idx));
                 let take = $amount.min(capacity);
-                each_side_body!($inner, take, $am, $avail, $leaf, $next);
+                each_side_deeper($inner, take, $am, $avail, $leaf);
                 take
             }
             Term::Account(_) => {
@@ -252,18 +287,18 @@ fn fold_deeper<F: Fn(usize) -> f64>(op: Term, inner: &[Term], leaf: &F) -> f64 {
 #[inline(always)]
 fn walk<A, L>(op: Term, inner: &[Term], amount: f64, account_manager: &mut AccountManager, avail: &A, leaf: &mut L) -> f64
 where A: Fn(&AccountManager, usize) -> f64, L: FnMut(&mut AccountManager, usize, f64) -> f64 {
-    walk_body!(op, inner, amount, account_manager, avail, leaf, walk_second)
-}
-
-#[inline(always)]
-fn walk_second<A, L>(op: Term, inner: &[Term], amount: f64, account_manager: &mut AccountManager, avail: &A, leaf: &mut L) -> f64
-where A: Fn(&AccountManager, usize) -> f64, L: FnMut(&mut AccountManager, usize, f64) -> f64 {
-    walk_body!(op, inner, amount, account_manager, avail, leaf, walk_deeper)
+    walk_body!(op, inner, amount, account_manager, avail, leaf)
 }
 
 fn walk_deeper<A, L>(op: Term, inner: &[Term], amount: f64, account_manager: &mut AccountManager, avail: &A, leaf: &mut L) -> f64
 where A: Fn(&AccountManager, usize) -> f64, L: FnMut(&mut AccountManager, usize, f64) -> f64 {
-    walk_body!(op, inner, amount, account_manager, avail, leaf, walk_deeper)
+    walk_body!(op, inner, amount, account_manager, avail, leaf)
+}
+
+/// Hand `amount` to every side of an `&` under a `|`, by call: see the `|` arm of `walk_body`.
+fn each_side_deeper<A, L>(inner: &[Term], amount: f64, account_manager: &mut AccountManager, avail: &A, leaf: &mut L)
+where A: Fn(&AccountManager, usize) -> f64, L: FnMut(&mut AccountManager, usize, f64) -> f64 {
+    each_side_body!(inner, amount, account_manager, avail, leaf, walk_deeper)
 }
 
 /// The first account in a subtree: its leftmost leaf.
