@@ -150,6 +150,17 @@ fn test_the_whole_take_is_debited_to_the_users_accounts() {
 }
 
 #[test]
+fn test_the_take_is_capped_and_charged_at_the_debit_factor() {
+    // 24 in the account at factor 2 is 12 of water: the same takes as above, each charged twice
+    let head = "[acc.licences]\naccounts = name, size, initial, debit_factor,\n           licence, 1000, 24, 2,";
+    let mut model = run(&rig(head, &unregulated_river("100"), 0, "demand = 3\naccounts = licence", "5")
+        .replace("[outputs]", "[outputs]\nacc.licence.closing_balance"));
+    assert_eq!(series(&mut model, "node.pump.diversion")[..3], [8.0, 4.0, 0.0]);
+    assert_eq!(series(&mut model, "node.pump.ds_2")[..3], [5.0, 4.0, 0.0], "outlets first");
+    assert_eq!(series(&mut model, "acc.licence.closing_balance")[..3], [8.0, 0.0, 0.0]);
+}
+
+#[test]
 fn test_outlet_orders_take_no_part_in_carryover() {
     // The river is dry on the first day. The user's own unmet 3 is carried over. The field's
     // unmet 5 is not: the field orders again the next day, and carrying its order over as

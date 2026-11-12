@@ -187,6 +187,35 @@ fn test_account_cap_applies_to_the_whole_order_outlets_first() {
 }
 
 #[test]
+fn test_account_cap_is_in_water_under_a_debit_factor() {
+    // 12 in the account at factor 2 is 6 of water: the same cut as above, and the 6 charges 12
+    let head = "[acc.licences]\naccounts = name, size, initial, debit_factor,\n           licence, 1000, 12, 2,";
+    let mut model = run(&rig(head, 0, 0, "order = 3\naccounts = licence", "5")
+        .replace("[outputs]", "[outputs]\nacc.licence.closing_balance\nacc.licence.debits"));
+    assert_eq!(series(&mut model, "node.dam.ds_1_order")[0], 6.0, "the order is capped in water");
+    assert_eq!(series(&mut model, "node.pump.ds_2")[0], 5.0, "the outlet first");
+    assert_eq!(series(&mut model, "node.pump.diversion")[0], 6.0);
+    assert_eq!(series(&mut model, "acc.licence.debits")[0], 12.0, "the whole take, at the factor");
+    assert_eq!(series(&mut model, "acc.licence.closing_balance")[0], 0.0);
+    assert_eq!(series(&mut model, "node.dam.ds_1_order")[1], 0.0);
+}
+
+#[test]
+fn test_account_combination_is_in_water_under_a_debit_factor() {
+    // licence & cap: the licence's 12 at factor 2 is 6 of water and binds; the cap is charged
+    // the same 6 at its factor of 1
+    let head = "[acc.licences]\naccounts = name, size, initial, debit_factor,\n           licence, 1000, 12, 2,\n           cap, 1000, 100, 1,";
+    let mut model = run(&rig(head, 0, 0, "order = 3\naccounts = licence & cap", "5")
+        .replace("[outputs]", "[outputs]\nacc.licence.debits\nacc.cap.debits"));
+    assert_eq!(series(&mut model, "node.dam.ds_1_order")[0], 6.0, "the order is capped in water");
+    assert_eq!(series(&mut model, "node.pump.ds_2")[0], 5.0, "the outlet first");
+    assert_eq!(series(&mut model, "node.pump.diversion")[0], 6.0);
+    assert_eq!(series(&mut model, "acc.licence.debits")[0], 12.0);
+    assert_eq!(series(&mut model, "acc.cap.debits")[0], 6.0);
+    assert_eq!(series(&mut model, "node.dam.ds_1_order")[1], 0.0);
+}
+
+#[test]
 fn test_supply_outlet_round_trips() {
     let ini = rig("", 0, 0, "order = 3", "5");
     let model = IniModelIO::read_model_string(&ini).expect("model should load");

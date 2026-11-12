@@ -468,3 +468,86 @@ acc.a.debits
     assert_eq!(series(&mut m, "acc.a.debits"), vec![100.0, 0.0, 0.0]);
     assert_eq!(balance(&m, "a"), 0.0);
 }
+
+#[test]
+fn two_users_on_one_account_share_its_water() {
+    // 100 at factor 2 is 50 of water between them. Each sees the other's order committed, so
+    // the two orders together come to 50 whichever orders first, and the diversions charge
+    // the whole 100.
+    let ini = r#"
+[kalix]
+start = 2020-01-01
+end = 2020-01-03
+
+[acc.g]
+accounts = name, size, initial, debit_factor,
+           a,    1000, 100,     2,
+
+[node.dam]
+type = storage
+loc = 0, 0
+initial_volume = 12000
+dimensions = 0,  0,     0,  0,
+             10, 12000, 10, 0,
+             11, 12100, 10, 1000,
+ds_1 = u1
+
+[node.u1]
+type = regulated_user
+loc = 0, 10
+order = 30
+accounts = a
+ds_1 = u2
+
+[node.u2]
+type = regulated_user
+loc = 0, 20
+order = 30
+accounts = a
+ds_1 = sink
+
+[node.sink]
+type = blackhole
+loc = 0, 30
+
+[outputs]
+node.u1.order
+node.u2.order
+node.u1.diversion
+node.u2.diversion
+acc.a.debits
+"#;
+    let mut m = run(ini);
+    let (o1, o2) = (series(&mut m, "node.u1.order"), series(&mut m, "node.u2.order"));
+    let mut first_day = [o1[0], o2[0]];
+    first_day.sort_by(f64::total_cmp);
+    assert_eq!(first_day, [20.0, 30.0], "30 for the first to order, the 20 left for the other");
+    assert_eq!(series(&mut m, "node.u1.diversion")[0] + series(&mut m, "node.u2.diversion")[0], 50.0);
+    assert_eq!(series(&mut m, "acc.a.debits"), vec![100.0, 0.0, 0.0]);
+    assert_eq!(&o1[1..], &[0.0, 0.0]);
+    assert_eq!(&o2[1..], &[0.0, 0.0]);
+    assert_eq!(balance(&m, "a"), 0.0);
+}
+
+#[test]
+fn allocate_counts_what_takes_charged_as_used() {
+    // allocate(50) every step: 500 is announced once and re-announcing it adds nothing, because
+    // the allocation (balance + use) is unchanged by a take. Each 100 of water charges 200.
+    let ras = "[ras.ann]\ntargets = acc.g\ntrigger = every_step\naction = allocate(50)\n";
+    let mut m = run(&unregulated_model("           a, 1000, 0, 2,", 100.0, "accounts = a", ras));
+    assert_eq!(series(&mut m, "node.user.diversion"), vec![100.0, 100.0, 50.0]);
+    assert_eq!(series(&mut m, "acc.a.closing_balance"), vec![300.0, 100.0, 0.0]);
+    assert_eq!(series(&mut m, "acc.a.use"), vec![200.0, 400.0, 500.0]);
+    assert_eq!(series(&mut m, "acc.a.allocation"), vec![500.0, 500.0, 500.0]);
+}
+
+#[test]
+fn reset_allocation_then_allocate_refills_in_charged_terms() {
+    // Reset then allocate(10) every step: 100 a step, which covers 50 of water at factor 2
+    let ras = "[ras.reset]\ntargets = acc.g\ntrigger = every_step\naction = reset_allocation\n\n\
+               [ras.ann]\ntargets = acc.g\ntrigger = every_step\naction = allocate(10)\n";
+    let mut m = run(&unregulated_model("           a, 1000, 0, 2,", 100.0, "accounts = a", ras));
+    assert_eq!(series(&mut m, "node.user.diversion"), vec![50.0, 50.0, 50.0]);
+    assert_eq!(series(&mut m, "acc.a.use"), vec![100.0, 100.0, 100.0], "use restarts each step");
+    assert_eq!(series(&mut m, "acc.a.allocation"), vec![100.0, 100.0, 100.0]);
+}
