@@ -379,13 +379,22 @@ impl AccountManager {
 
     /// Debit an account for water taken by a node: `amount` is water, and the
     /// account is charged amount * debit_factor. This is the only path that
-    /// feeds the `debits` series, so policy changes stay out of "water used".
+    /// feeds the `debits` series, so policy changes stay out of it.
     pub fn debit_account(&mut self, account_id: usize, amount: f64) {
-        let scaled_amount = amount * self.accounts[account_id].debit_factor;
-        self.accounts[account_id].debit_account_fast(scaled_amount);
-        self.accounts[account_id].debits_today += scaled_amount;
-        self.accounts[account_id].debits_since_reset += scaled_amount;
-        self.accounts[account_id].debits_this_period += scaled_amount;
+        let account = &mut self.accounts[account_id];
+        // A take at the limit charges exactly what was left. Callers pass
+        // min(remaining, get_account_debitable), so a binding limit arrives
+        // bit-equal to it; (balance / f) * f can miss the balance by a rounding
+        // step and leave dust or an overdraw. At f = 1 both arms agree.
+        let charged = if amount == (account.balance * account.inv_debit_factor).max(0.0) {
+            account.balance.max(0.0)
+        } else {
+            amount * account.debit_factor
+        };
+        account.debit_account_fast(charged);
+        account.debits_today += charged;
+        account.debits_since_reset += charged;
+        account.debits_this_period += charged;
     }
 
     /// What a regulated user may still order against an account, in water: the
@@ -411,8 +420,14 @@ impl AccountManager {
         debug_assert!(due_in < account.commit_ring.len(), "commit ring of '{}' not sized for a travel time of {}", account.name, due_in);
         let mut slot = account.commit_cursor + due_in;
         if slot >= account.commit_ring.len() { slot -= account.commit_ring.len(); }
-        // Committed in balance terms, like the debit it forecasts
-        let charged = amount * account.debit_factor;
+        // Committed in balance terms, like the debit it forecasts. An order at
+        // the limit commits exactly the headroom, as debit_account does.
+        let headroom = account.balance - account.committed;
+        let charged = if amount == (headroom * account.inv_debit_factor).max(0.0) {
+            headroom.max(0.0)
+        } else {
+            amount * account.debit_factor
+        };
         account.commit_ring[slot] += charged;
         account.committed += charged;
     }

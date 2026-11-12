@@ -10,29 +10,32 @@
 //    never the amount charged.
 // 4. Each account in a combination is charged at its own factor; order_accounts
 //    are charged at theirs.
-// 5. LOAD: the factor must be a finite, normal number greater than 0. 1 / f is precomputed at load and
-//    survives a rerun.
+// 5. LOAD: the factor must be a finite, normal number greater than 0. 1 / f is
+//    precomputed at load and survives a rerun.
+// 6. EXACT AT THE LIMIT: a take or order that uses all an account allows charges
+//    or commits exactly what was left, however (balance / f) * f rounds.
 use crate::io::ini_model_io::IniModelIO;
+use crate::model::Model;
 
-fn load(ini: &str) -> crate::model::Model {
+fn load(ini: &str) -> Model {
     let mut model = IniModelIO::read_model_string(ini).expect("model should load");
     model.configure().expect("model should configure");
     model
 }
 
-fn run(ini: &str) -> crate::model::Model {
+fn run(ini: &str) -> Model {
     let mut model = load(ini);
     model.run().expect("simulation should run");
     model
 }
 
-fn series(model: &mut crate::model::Model, name: &str) -> Vec<f64> {
+fn series(model: &mut Model, name: &str) -> Vec<f64> {
     let idx = model.data_cache.get_series_idx(name, false)
         .unwrap_or_else(|| panic!("no series '{}'", name));
     model.data_cache.series[idx].values.clone()
 }
 
-fn balance(model: &crate::model::Model, name: &str) -> f64 {
+fn balance(model: &Model, name: &str) -> f64 {
     let idx = model.account_manager.get_account_idx(name).unwrap();
     model.account_manager.get_account_balance(idx)
 }
@@ -75,16 +78,16 @@ acc.a.allocation
 }
 
 /// A user two steps below its supply (as in test_account_committed), ordering
-/// 100 a day against an account holding 100 at factor 2.
-fn lagged_model() -> String {
-    r#"
+/// 100 a day against an account holding 100 at the given factor.
+fn lagged_model(factor: f64) -> String {
+    format!(r#"
 [kalix]
 start = 2020-01-01
 end = 2020-01-05
 
 [acc.g]
 accounts = name, size, initial, debit_factor,
-           a,    1000, 100,     2,
+           a,    1000, 100,     {factor},
 
 [node.dam]
 type = storage
@@ -120,7 +123,7 @@ node.dam.ds_1
 acc.a.committed
 acc.a.closing_balance
 acc.a.debits
-"#.to_string()
+"#)
 }
 
 // ------------------------------------------------------------------------------------------
@@ -197,7 +200,7 @@ fn roll_cap_credits_back_the_charged_amount() {
 
 #[test]
 fn order_is_capped_in_water_and_committed_as_charged() {
-    let mut m = run(&lagged_model());
+    let mut m = run(&lagged_model(2.0));
     assert_eq!(series(&mut m, "node.user.order"), vec![50.0, 0.0, 0.0, 0.0, 0.0], "the node orders water");
     assert_eq!(series(&mut m, "node.dam.ds_1"), vec![50.0, 0.0, 0.0, 0.0, 0.0]);
     assert_eq!(series(&mut m, "node.user.order_due"), vec![0.0, 0.0, 50.0, 0.0, 0.0]);
@@ -276,11 +279,24 @@ fn reciprocal_is_set_at_load_and_survives_a_rerun() {
 }
 
 #[test]
-fn a_full_draw_at_an_inexact_factor_leaves_no_meaningful_balance() {
-    // 10 * (1/3) * 3 need not be exactly 10: the residue is a rounding step, never a take
-    let mut m = run(&unregulated_model("           a, 1000, 10, 3,", 80.0, "accounts = a", ""));
-    let diversion = series(&mut m, "node.user.diversion");
-    assert!((diversion[0] - 10.0 / 3.0).abs() < 1e-12, "{:?}", diversion);
-    assert!(diversion[1].abs() < 1e-12 && diversion[2].abs() < 1e-12, "{:?}", diversion);
-    assert!(balance(&m, "a").abs() < 1e-12, "{}", balance(&m, "a"));
+fn a_full_draw_at_an_inexact_factor_charges_exactly_the_balance() {
+    // (100 / f) * f is not 100 at these factors: 3 leaves dust, 1.2 overdraws
+    for factor in ["3", "1.2"] {
+        let rows = format!("           a, 1000, 100, {},", factor);
+        let mut m = run(&unregulated_model(&rows, 200.0, "accounts = a", ""));
+        let diversion = series(&mut m, "node.user.diversion");
+        assert_eq!(&diversion[1..], &[0.0, 0.0], "factor {}: no dust left to take", factor);
+        assert_eq!(series(&mut m, "acc.a.closing_balance"), vec![0.0, 0.0, 0.0], "factor {}", factor);
+        assert_eq!(series(&mut m, "acc.a.debits"), vec![100.0, 0.0, 0.0], "factor {}", factor);
+    }
+}
+
+#[test]
+fn a_full_order_at_an_inexact_factor_commits_exactly_the_headroom() {
+    let mut m = run(&lagged_model(3.0));
+    let order = series(&mut m, "node.user.order");
+    assert_eq!(&order[1..], &[0.0, 0.0, 0.0, 0.0], "no phantom order from uncommitted dust");
+    assert_eq!(series(&mut m, "acc.a.committed"), vec![0.0, 100.0, 100.0, 0.0, 0.0]);
+    assert_eq!(series(&mut m, "acc.a.closing_balance"), vec![100.0, 100.0, 0.0, 0.0, 0.0]);
+    assert_eq!(series(&mut m, "acc.a.debits"), vec![0.0, 0.0, 100.0, 0.0, 0.0]);
 }
