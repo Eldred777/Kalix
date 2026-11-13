@@ -27,3 +27,4 @@ pip: "pip install kalix==0.4.10"
     - Ctrl+0 (Cmd+0 on macOS) zooms the map to fit.
     - Alt+letter opens the menus on Windows and Linux, e.g. Alt+F for `File`.
 - New! An account's `debit_factor` sets what a take costs it: a user taking x ML is charged x × `debit_factor`, so it can take at most balance / `debit_factor`. Add it as a column in an `[acc.*]` table; it defaults to 1. See [debit factors](https://kalix.org/docs/accounts/#debit-factors).
+- Fixed: a user that takes or orders everything its accounts allow now empties them exactly. Before, with two or more accounts (or a combination, or a take split between supply outlets, its own demand and opportunistic demand), the last account could keep about 1e-14 ML and the user took or ordered that the next step. A condition such as `acc.<name>.closing_balance > 0` can now read false on those steps where it read true.
