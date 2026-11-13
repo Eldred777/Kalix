@@ -32,6 +32,7 @@ mod test_storage_forced_level;
 mod test_order_accounts;
 mod test_account_committed;
 mod test_account_debit_factor;
+mod test_account_exact_fill;
 mod test_regulated_user_order_factor;
 mod test_storage_floor_blowup;
 mod test_storage_spill_order_kink;

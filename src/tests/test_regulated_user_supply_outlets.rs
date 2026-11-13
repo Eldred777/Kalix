@@ -324,3 +324,34 @@ node.paddock.supply
     assert_eq!(series(&mut model, "node.ofs.usflow")[2], 510.0);
     assert_eq!(series(&mut model, "node.ofs.volume")[2], 1480.0, "980 + 510 - 10");
 }
+
+#[test]
+fn test_river_limited_parts_are_never_negative() {
+    // No accounts. A spilling dam and a pump of 0.3: the outlet's 0.03 and the user's own order
+    // take all the pump lifts, and 0.03 + (0.3 - 0.03) is a rounding step over 0.3, so the
+    // opportunistic take must be capped by what is left, not by 0.3 less the sum of the parts
+    let ini = rig("", 0, 0, "order = 1\npump = 0.3\nopportunistic_demand = 400", "0.03")
+        .replace("initial_volume = 5000", "initial_volume = 15000")
+        .replace("[outputs]", "[outputs]\nnode.pump.diversion_opportunistic");
+    let mut model = run(&ini);
+    assert_eq!(series(&mut model, "node.pump.ds_2")[0], 0.03);
+    for (t, opportunistic) in series(&mut model, "node.pump.diversion_opportunistic").into_iter().enumerate() {
+        assert!(opportunistic >= 0.0, "step {}: opportunistic take {}", t, opportunistic);
+    }
+}
+
+#[test]
+fn test_outlet_own_and_opportunistic_at_the_cap_drain_the_account() {
+    // A spilling dam, so river water is there for the opportunistic take. 0.1 down the outlet,
+    // 0.1 of the user's own and the rest of 0.3 at factor 0.7 opportunistic: the parts sum to
+    // the cap only to a rounding step, and the account must still be emptied exactly
+    let head = "[acc.licences]\naccounts = name, size, initial, debit_factor,\n           licence, 1000, 0.3, 0.7,";
+    let ini = rig(head, 0, 0, "order = 0.1\nopportunistic_demand = 400\naccounts = licence", "0.1")
+        .replace("initial_volume = 5000", "initial_volume = 15000")
+        .replace("[outputs]", "[outputs]\nacc.licence.closing_balance\nnode.pump.diversion_opportunistic");
+    let mut model = run(&ini);
+    assert_eq!(series(&mut model, "node.pump.ds_2")[0], 0.1);
+    assert!(series(&mut model, "node.pump.diversion_opportunistic")[0] > 0.0);
+    assert_eq!(series(&mut model, "acc.licence.closing_balance")[0], 0.0, "drained exactly");
+    assert_eq!(series(&mut model, "node.pump.diversion")[1], 0.0, "nothing left to take on day 2");
+}

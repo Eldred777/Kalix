@@ -217,3 +217,25 @@ fn test_supply_outlet_round_trips() {
     let reloaded = IniModelIO::read_model_string(&rendered).expect("canonical render should re-load");
     assert_eq!(IniModelIO::model_to_string(&reloaded), rendered);
 }
+
+/// The rig with a second field on ds_3, ordering `order` of its own
+fn with_second_field(ini: String, order: &str) -> String {
+    ini.replace("ds_2 = channel\n", "ds_2 = channel\nds_3 = channel2\n")
+        .replace("[node.outlet]", &format!("[node.channel2]\ntype = routing\nloc = 20, 40\nlag = 0\nds_1 = paddock2\n\n\
+            [node.paddock2]\ntype = field\narea = 1\navailable_water = 1000\ninitial_depletion = 1000\nfallow = bare\n\
+            crop_1 = thirsty\ncrop_1_plant = 1\ncrop_1_viable_area = this.area\nloc = 20, 50\ncrop_1_order = {order}\nds_1 = outlet\n\n\
+            [node.outlet]"))
+}
+
+#[test]
+fn test_two_outlets_taking_the_whole_cap_drain_the_account() {
+    // 0.3 at factor 0.7, taken 0.1 down ds_2 and the rest down ds_3: the outlets' parts sum to
+    // the cap only to a rounding step, and the account must still be emptied exactly
+    let head = "[acc.licences]\naccounts = name, size, initial, debit_factor,\n           licence, 1000, 0.3, 0.7,";
+    let ini = with_second_field(rig(head, &unregulated_river("100"), 0, "demand = 0\naccounts = licence", "0.1"), "400")
+        .replace("[outputs]", "[outputs]\nacc.licence.closing_balance\nnode.pump.ds_3");
+    let mut model = run(&ini);
+    assert_eq!(series(&mut model, "node.pump.ds_2")[0], 0.1);
+    assert_eq!(series(&mut model, "acc.licence.closing_balance")[0], 0.0, "drained exactly");
+    assert_eq!(series(&mut model, "node.pump.diversion")[1], 0.0, "nothing left to take on day 2");
+}
