@@ -165,7 +165,7 @@ impl Node for UnregulatedUserNode {
             }
         }
         if let Some(v) = self.demand_carryover_reset_month {
-            if (v < 1) || (v > 12) {
+            if !(1..=12).contains(&v) {
                 return Err(format!("Invalid demand carryover reset month at '{}': {}", self.name, v).to_string());
             }
         }
@@ -403,7 +403,7 @@ impl UnregulatedUserNode {
         }
 
         // Update the annual diversion
-        if let Some(_) = self.annual_cap { self.annual_diversion += self.diversion; }
+        if self.annual_cap.is_some() { self.annual_diversion += self.diversion; }
 
         // Extract the water and update mbal. What goes down the supply outlets stays in the
         // model; what the user keeps for its own use leaves it here.
